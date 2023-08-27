@@ -1,0 +1,45 @@
+{
+  "name": "koishi-plugin-bella-sign-in",
+  "description": "",
+  "version": "0.0.1",
+  "main": "lib/index.js",
+  "typings": "lib/index.d.ts",
+  "files": [
+    "lib",
+    "dist"
+  ],
+  "homepage": "https://github.com/twiyin0/koishi-plugin-bella-sign-in.git",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/twiyin0/koishi-plugin-bella-sign-in.git"
+  },
+  "contributors": [
+    "Twiyin0 <twiyin0@outlook.com>"
+  ],
+  "koishi": {
+    "browser": true,
+    "description": {
+      "en": "A sign-in plugin for my own use",
+      "zh": "贝拉bot的自用签到插件"
+    },
+    "service": {
+      "required": [
+        "puppeteer",
+        "database"
+      ]
+    }
+  },
+  "license": "MIT",
+  "scripts": {},
+  "keywords": [
+    "chatbot",
+    "koishi",
+    "plugin",
+    "sign in",
+    "签到",
+    "贝拉bot"
+  ],
+  "peerDependencies": {
+    "koishi": "^4.12.0"
+  }
+}
