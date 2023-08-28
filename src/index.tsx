@@ -35,7 +35,7 @@ export function apply(ctx: Context) {
     current_point: "unsigned"
   })
 
-  ctx.command('bellasignin', '贝拉，签到!!', { minInterval: Time.minute }).alias('签到')
+  ctx.command('bella/signin', '贝拉，签到!!', { minInterval: Time.minute }).alias('签到')
   .option('text','-t 纯文本输出')
   .action(async ({session,options}) => {
     let signTime =  Time.template('yyyy-MM-dd hh:mm:ss', new Date());
@@ -74,7 +74,7 @@ export function apply(ctx: Context) {
       return render(session.username,false,all_point,count,time,current_point,ctx);
   })
 
-  ctx.command('bellasigninquery','贝拉签到积分查询',{ minInterval: Time.minute }).alias('签到查询').alias('积分查询')
+  ctx.command('bella/signinquery','贝拉签到积分查询',{ minInterval: Time.minute }).alias('签到查询').alias('积分查询')
   .option('text','-t 纯文本输出')
   .action(async ({session,options}) => {
     let all_point = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.point;
@@ -91,12 +91,6 @@ export function apply(ctx: Context) {
       </>
     else if (!session.isDirect) 
       return render(session.username,false,all_point,count,time,current_point,ctx);
-  })
-  ctx.on('message',async (session)=>{
-    var getword = await ctx.http.get('https://v1.hitokoto.cn/?c=b')
-    // getword = JSON.parse(getword.toString());
-    if (session.content=="TTTest")
-      session.send((getword.hitokoto))
   })
 }
 
@@ -147,7 +141,7 @@ async function render(uname:string,signin:boolean,all_point:number,count:number,
             签到次数: {count}<br/>
             本次签到时间: {last_sign}</p>
         </div>
-        <div style={{width: '46%','font-size': '1.5rem'}}>
+        <div style={{width: '46%','font-size': '1.4rem'}}>
           <p><strong>{noonJudge()},{uname}</strong></p>
           <p>{word}</p>
           <p>---来自《{author}》</p>
