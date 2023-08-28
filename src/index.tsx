@@ -92,6 +92,42 @@ export function apply(ctx: Context) {
     else if (!session.isDirect) 
       return render(session.username,false,all_point,count,time,current_point,ctx);
   })
+  // 抽奖部分
+  ctx.command('bella/lottery <count:number>', '贝拉抽奖！通过消耗签到积分抽奖').alias('抽奖')
+  .action(async ({session},count) => {
+    let all_point:number = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.point;
+    if (!count) {logger.info(`用户{${session.username}(${session.userId})} 参数错误!`);return '请输入消耗的积分';}
+    else if (all_point-count<0) {logger.info(`用户{${session.username}(${session.userId})} 积分不足!`); return '您的积分不足';}
+    else {
+      if(Random.bool(0.4))  {
+        var result:any = rangePoint(count);
+        await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), point: Number(all_point-count+result.final_point) }]);
+        logger.info(`用户{${session.username}(${session.userId})} 消耗${count}积分抽取${result.final_point}!`);
+        return <>
+        <at id={session.userId}/>&#10;
+        {result.msg} &#10;
+        消耗{count}积分抽得: {result.final_point}积分
+        </>
+      }
+      else {
+        await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), point: Number(all_point-count) }]);
+        logger.info(`用户{${session.username}(${session.userId})} 白给${count}积分!`);
+        return <>
+        <at id={session.userId}/>&#10;
+        {Random.pick([
+          <>获得积分:0&#10;赌狗赌狗，赌到最后一无所有！</>
+          ,<>获得积分:0&#10;哦吼，积分没喽！</>
+          ,<>获得积分:0&#10;谢谢你的积分！</>
+          ,<>获得积分:0&#10;积分化作了尘埃</>
+          ,<>获得积分:0&#10;哈哈！大大大非酋</>
+          ,<>获得积分:0&#10;杂鱼♡~大哥哥连这点积分都赌掉了呢~</>
+          ,<>获得积分:0&#10;杂鱼♡~杂鱼♡~</>
+          ,<>获得积分:0&#10;摸摸，杂鱼大哥哥不哭~</>
+        ])}
+        </>
+      }
+    }
+  })
 }
 
 function pointJudge(point:number) {
@@ -108,6 +144,7 @@ async function render(uname:string,signin:boolean,all_point:number,count:number,
   var getword = await ctx.http.get('https://v1.hitokoto.cn/?c=b')
   let word = getword.hitokoto;
   let author = getword.from;
+  let lvline = levelJudge(all_point).level_line;
   return <html>
   <div style={{width:'720px'}}>
     <div style={{width: '720px'}}>
@@ -126,10 +163,10 @@ async function render(uname:string,signin:boolean,all_point:number,count:number,
         <label for="fuel" style={{color: 'rgb(204, 84, 14)','font-size': '1.8rem'}}>level {levelJudge(all_point).level}</label>
         <meter id="fuel" style={{width: '96%',height: '52px'}}
         min="0"
-        max={String(levelJudge(all_point).level_line)}
-        low={String((levelJudge(all_point).level_line)*0.4)}
-        high={String((levelJudge(all_point).level_line)*0.6)}
-        optimum={String((levelJudge(all_point).level_line)*0.7)}
+        max={String(lvline)}
+        low={String(lvline*0.4)}
+        high={String(lvline*0.6)}
+        optimum={String(lvline*0.7)}
         value={String(all_point)}
       ></meter>
     </div>
@@ -158,9 +195,9 @@ function levelJudge(all_point:number) {
     level_line: 0
   }
   if (all_point <= 1000) {lvl.level = 1; lvl.level_line = 1000}
-  if (all_point > 1000 && all_point <=3000) {lvl.level = 2; lvl.level_line = 3000}
-  if (all_point > 3000 && all_point <=7000) {lvl.level = 3; lvl.level_line = 7000}
-  if (all_point > 7000 && all_point <=15000) {lvl.level = 4; lvl.level_line = 15000}
+  if (all_point > 1000 && all_point <=3000)   {lvl.level = 2; lvl.level_line = 3000 }
+  if (all_point > 3000 && all_point <=7000)   {lvl.level = 3; lvl.level_line = 7000 }
+  if (all_point > 7000 && all_point <=15000)  {lvl.level = 4; lvl.level_line = 15000}
   if (all_point > 15000 && all_point <=25000) {lvl.level = 5; lvl.level_line = 25000}
   if (all_point > 25000 && all_point <=40000) {lvl.level = 6; lvl.level_line = 40000}
   if (all_point > 40000) {lvl.level = 7; lvl.level_line = 60000}
@@ -176,4 +213,24 @@ function noonJudge() {
   if (14>=hour && hour<18)  return '下午好';
   if (18>=hour && hour<20)  return '傍晚好';
   if (20>=hour && hour<=23) return '晚上好';
+}
+
+function rangePoint(count:number) {
+  var cnt = Random.pick([0,1,2,3,4,5,6,7,8])  // 0.2 0.5 0.8 1.2 1.5 2.0 3.0 4.0
+  let result = {
+    final_point: 0,
+    msg: 'string'
+  }
+  switch(cnt) {
+    case 0: result.final_point = Math.floor(count*0.2); result.msg = "哈哈，赌狗！"; break;
+    case 1: result.final_point = Math.floor(count*0.5); result.msg = "伤害减半！";break;
+    case 2: result.final_point = Math.floor(count*0.8); result.msg = "不过如此";break;
+    case 3: result.final_point = Math.floor(count*1.2); result.msg = "运气不错！";break;
+    case 4: result.final_point = Math.floor(count*1.5); result.msg = "哇哦！欧皇！";break;
+    case 5: result.final_point = Math.floor(count*2.0); result.msg = "双倍泰裤辣！";break;
+    case 6: result.final_point = (Random.bool(0.5))? Math.floor(count*3.0):count; result.msg = (result.final_point-count)? "3倍！这是甚么运气！": "欸嘿，虚晃一枪!";break;
+    case 7: result.final_point = (Random.bool(0.2))? Math.floor(count*4.0):count; result.msg = (result.final_point-count)? "太可怕了！是有什么欧皇秘诀吗": "欸嘿，虚晃一枪!";break;
+    default: result.final_point = count; result.msg = "欸嘿，虚晃一枪!";break;
+  }
+  return result;
 }
