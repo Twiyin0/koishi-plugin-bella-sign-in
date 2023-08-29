@@ -25,6 +25,35 @@ export interface Bella_sign_in {
   current_point: number
 }
 
+interface TimeGreeting {
+  range: [number, number];
+  message: string;
+}
+
+const timeGreetings: TimeGreeting[] = [
+  { range: [ 0,  6], message: '凌晨好' },
+  { range: [ 6, 11], message: '上午好' },
+  { range: [11, 14], message: '中午好' },
+  { range: [14, 18], message: '下午好' },
+  { range: [18, 20], message: '傍晚好' },
+  { range: [20, 24], message: '晚上好' },
+];
+
+interface LevelInfo {
+  level: number;
+  level_line: number;
+}
+
+const levelInfos: LevelInfo[] = [
+  { level: 1, level_line:  1000 },
+  { level: 2, level_line:  3000 },
+  { level: 3, level_line:  7000 },
+  { level: 4, level_line: 15000 },
+  { level: 5, level_line: 25000 },
+  { level: 6, level_line: 40000 },
+  { level: 7, level_line: 60000 },
+];
+
 export function apply(ctx: Context) {
   // 数据库创建新表
   ctx.database.extend("bella_sign_in", {
@@ -179,7 +208,7 @@ async function render(uname:string,signin:boolean,all_point:number,count:number,
             本次签到时间: {last_sign}</p>
         </div>
         <div style={{width: '46%','font-size': '1.4rem'}}>
-          <p><strong>{noonJudge()},{uname}</strong></p>
+          <p><strong>{getGreeting(new Date().getHours())},{uname}</strong></p>
           <p>{word}</p>
           <p>---来自《{author}》</p>
         </div>
@@ -189,30 +218,22 @@ async function render(uname:string,signin:boolean,all_point:number,count:number,
   </html>
 }
 
-function levelJudge(all_point:number) {
-  let lvl = {
-    level: 0,
-    level_line: 0
+function levelJudge(all_point: number): LevelInfo {
+  for (const levelInfo of levelInfos) {
+    if (all_point <= levelInfo.level_line) {
+      return levelInfo;
+    }
   }
-  if (all_point <= 1000) {lvl.level = 1; lvl.level_line = 1000}
-  if (all_point > 1000 && all_point <=3000)   {lvl.level = 2; lvl.level_line = 3000 }
-  if (all_point > 3000 && all_point <=7000)   {lvl.level = 3; lvl.level_line = 7000 }
-  if (all_point > 7000 && all_point <=15000)  {lvl.level = 4; lvl.level_line = 15000}
-  if (all_point > 15000 && all_point <=25000) {lvl.level = 5; lvl.level_line = 25000}
-  if (all_point > 25000 && all_point <=40000) {lvl.level = 6; lvl.level_line = 40000}
-  if (all_point > 40000) {lvl.level = 7; lvl.level_line = 60000}
-  return lvl;
+  
+  return levelInfos[levelInfos.length - 1]; // Default to the last level
 }
 
-function noonJudge() {
-  let date = new Date();
-  let hour = date.getHours();
-  if ( 0>=hour && hour< 6)  return '凌晨好';
-  if ( 6>=hour && hour<11)  return '上午好';
-  if (11>=hour && hour<14)  return '中午好';
-  if (14>=hour && hour<18)  return '下午好';
-  if (18>=hour && hour<20)  return '傍晚好';
-  if (20>=hour && hour<=23) return '晚上好';
+function getGreeting(hour: number): string {
+  const greeting = timeGreetings.find((timeGreeting) =>
+    hour >= timeGreeting.range[0] && hour < timeGreeting.range[1]
+  );
+
+  return greeting ? greeting.message : '你好';
 }
 
 function rangePoint(count:number) {
