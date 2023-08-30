@@ -3,9 +3,29 @@ import { } from '@koishijs/plugin-rate-limit'
 
 export const name = 'bella-sign-in'
 
-export interface Config {}
+export const usage = `
+## 使用说明
+1、随机横图api目前只支持网络url,是必填项  
+2、签到积分随机最大范围(最小为1)  
 
-export const Config: Schema<Config> = Schema.object({})
+## 注意
+作者的api不打算完全公开，如果想用作者的api可以选择降级到v0.1.x或者通过v0.1.x源码自己找  
+`
+
+export interface Config {
+  imgurl: string,
+  signpointmax: number,
+  signpointmin: number
+}
+
+export const Config: Schema<Config> = Schema.object({
+  imgurl: Schema.string().role('link').required()
+  .description('随机横图api'),
+  signpointmin: Schema.number().default(1)
+  .description('签到积分随机最小值'),
+  signpointmax: Schema.number().default(100)
+  .description('签到积分随机最大值')
+})
 
 export const using = ['database','puppeteer']
 
@@ -49,12 +69,12 @@ const levelInfos: LevelInfo[] = [
   { level: 2, level_line:  3000 },
   { level: 3, level_line:  7000 },
   { level: 4, level_line: 15000 },
-  { level: 5, level_line: 25000 },
-  { level: 6, level_line: 40000 },
-  { level: 7, level_line: 60000 },
+  { level: 5, level_line: 30000 },
+  { level: 6, level_line: 50000 },
+  { level: 7, level_line: 80000 },
 ];
 
-export function apply(ctx: Context) {
+export function apply(ctx: Context,config: Config) {
   // 数据库创建新表
   ctx.database.extend("bella_sign_in", {
     id: "string",
@@ -72,7 +92,7 @@ export function apply(ctx: Context) {
     let time = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.time;
     let count = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.count;
     let current_point = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.current_point;
-    let signpoint = Random.int(1,100);
+    let signpoint = Random.int(config.signpointmax,config.signpointmax);
     let signText = pointJudge(signpoint);
     if (!all_point && !time && !session.isDirect) {
       await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), time: signTime, point: Number(signpoint), count: 1, current_point: Number(signpoint) }]);
@@ -83,7 +103,7 @@ export function apply(ctx: Context) {
         <at id={session.userId} />签到成功!&#10;{signText}&#10;获得积分：{signpoint}
         </>
       else if (!session.isDirect) 
-          return render(session.username,true,signpoint,1,signTime,signpoint,ctx);
+          return render(session.username,true,signpoint,1,signTime,signpoint,ctx,config);
     }
     if (Number(time.slice(8,10)) - Number(signTime.slice(8,10)) && !session.isDirect) {
       await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), time: signTime, point: Number(all_point+signpoint), count: count+1, current_point: Number(signpoint) }]);
@@ -93,14 +113,14 @@ export function apply(ctx: Context) {
         <at id={session.userId} />签到成功!&#10;{signText}&#10;获得积分：{signpoint}
         </>
       else if (!session.isDirect) 
-          return render(session.username,true,all_point,count,time,current_point,ctx);
+          return render(session.username,true,all_point+current_point,count+1,signTime,current_point,ctx,config);
     }
     if (!session.isDirect && options.text)
       return <>
       <at id={session.userId} />今天已经签到过了哦，明天再来吧！&#10;本次获得积分: {current_point? current_point:'暂无数据'}
       </>
     else if (!session.isDirect)
-      return render(session.username,false,all_point,count,time,current_point,ctx);
+      return render(session.username,false,all_point,count,time,current_point,ctx,config);
   })
 
   ctx.command('bella/signinquery','贝拉签到积分查询',{ minInterval: Time.minute }).alias('签到查询').alias('积分查询')
@@ -119,7 +139,7 @@ export function apply(ctx: Context) {
       本次获得积分: {current_point? current_point:'暂无数据'}
       </>
     else if (!session.isDirect) 
-      return render(session.username,false,all_point,count,time,current_point,ctx);
+      return render(session.username,false,all_point,count,time,current_point,ctx,config);
   })
   // 抽奖部分
   ctx.command('bella/lottery <count:number>', '贝拉抽奖！通过消耗签到积分抽奖').alias('抽奖')
@@ -169,7 +189,7 @@ function pointJudge(point:number) {
   return msg;
 }
 
-async function render(uname:string,signin:boolean,all_point:number,count:number,last_sign:string,current_point:string|number,ctx: Context) {
+async function render(uname:string,signin:boolean,all_point:number,count:number,last_sign:string,current_point:string|number,ctx: Context,cfg:Config) {
   var getword = await ctx.http.get('https://v1.hitokoto.cn/?c=b')
   let word = getword.hitokoto;
   let author = getword.from;
@@ -177,7 +197,7 @@ async function render(uname:string,signin:boolean,all_point:number,count:number,
   return <html>
   <div style={{width:'720px'}}>
     <div style={{width: '720px'}}>
-        <img style={{width: '100%',display: 'flex','align-items': 'center'}} src="https://api.iin0.cn/img/acc?type=webp" />
+        <img style={{width: '100%',display: 'flex','align-items': 'center'}} src={cfg.imgurl} />
     </div>
     <div style={{width: '720px',margin: '1rem'}}>
     <div style={{width: '100%',height:'6.2rem',display: 'flex'}}>
@@ -193,9 +213,9 @@ async function render(uname:string,signin:boolean,all_point:number,count:number,
         <meter id="fuel" style={{width: '96%',height: '52px'}}
         min="0"
         max={String(lvline)}
-        low={String(lvline*0.4)}
-        high={String(lvline*0.6)}
-        optimum={String(lvline*0.7)}
+        low={String(lvline*0.7)}
+        high={String(lvline*0.8)}
+        optimum={String(lvline*0.85)}
         value={String(all_point)}
       ></meter>
     </div>
