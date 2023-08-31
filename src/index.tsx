@@ -113,7 +113,7 @@ export function apply(ctx: Context,config: Config) {
         <at id={session.userId} />签到成功!&#10;{signText}&#10;获得积分：{signpoint}
         </>
       else if (!session.isDirect) 
-          return render(session.username,true,all_point+current_point,count+1,signTime,current_point,ctx,config);
+          return render(session.username,true,all_point+signpoint,count+1,signTime,signpoint,ctx,config);
     }
     if (!session.isDirect && options.text)
       return <>
