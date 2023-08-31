@@ -92,7 +92,7 @@ export function apply(ctx: Context,config: Config) {
     let time = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.time;
     let count = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.count;
     let current_point = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.current_point;
-    let signpoint = Random.int(config.signpointmax,config.signpointmax);
+    let signpoint = Random.int(config.signpointmin,config.signpointmax);
     let signText = pointJudge(signpoint);
     if (!all_point && !time && !session.isDirect) {
       await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), time: signTime, point: Number(signpoint), count: 1, current_point: Number(signpoint) }]);
