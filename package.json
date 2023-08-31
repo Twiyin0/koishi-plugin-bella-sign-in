@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-bella-sign-in",
   "description": "",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -40,6 +40,6 @@
     "贝拉bot"
   ],
   "peerDependencies": {
-    "koishi": "^4.12.0"
+    "koishi": "^4.13.5"
   }
 }

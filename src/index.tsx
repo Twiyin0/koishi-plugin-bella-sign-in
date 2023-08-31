@@ -43,6 +43,9 @@ export interface Bella_sign_in {
   point: number
   count: number
   current_point: number
+  working: boolean
+  stime: number
+  wpoint: number
 }
 
 interface TimeGreeting {
@@ -81,7 +84,23 @@ export function apply(ctx: Context,config: Config) {
     time: "string",
     point: "unsigned",
     count: "unsigned",
-    current_point: "unsigned"
+    current_point: "unsigned",
+    working: "boolean",
+    stime: "unsigned",
+    wpoint: "unsigned"
+  })
+
+  ctx.command('bella', '^v^贝拉签到-^-', { minInterval: Time.minute })
+  .action(async ({session}) => {
+    if (!session.isDirect)
+      return <>
+      signin 签到获得积分,别名:签到&#10;
+      signinquery 签到信息查询,别名:签到查询&#10;
+      lottery 积分抽奖,别名:抽奖&#10;
+      workstart 开始打工(0.5~8小时),别名:开始打工&#10;
+      workend 结束打工获取积分(与等级相关)别名:结束打工&#10;
+      workcheck 查看打工情况,别名:打工查询
+      </>
   })
 
   ctx.command('bella/signin', '贝拉，签到!!', { minInterval: Time.minute }).alias('签到')
@@ -142,16 +161,16 @@ export function apply(ctx: Context,config: Config) {
       return render(session.username,false,all_point,count,time,current_point,ctx,config);
   })
   // 抽奖部分
-  ctx.command('bella/lottery <count:number>', '贝拉抽奖！通过消耗签到积分抽奖').alias('抽奖')
+  ctx.command('bella/lottery <count:number>', '贝拉抽奖！通过消耗签到积分抽奖', { minInterval: Time.minute }).alias('抽奖')
   .action(async ({session},count) => {
     let all_point:number = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.point;
-    if (!count) {logger.info(`用户{${session.username}(${session.userId})} 参数错误!`);return '请输入消耗的积分';}
+    if (!count) {logger.info(`用户{${session.username}(${session.userId})} 参数错误!`);return '请输入有效积分';}
     else if (all_point-count<0) {logger.info(`用户{${session.username}(${session.userId})} 积分不足!`); return '您的积分不足';}
     else {
       if(Random.bool(0.4))  {
         var result:any = rangePoint(count);
         await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), point: Number(all_point-count+result.final_point) }]);
-        logger.info(`用户{${session.username}(${session.userId})} 消耗${count}积分抽取${result.final_point}!`);
+        logger.info(`用户{${session.username}(${session.userId})} 消耗${count}积分获得${result.final_point}积分!`);
         return <>
         <at id={session.userId}/>&#10;
         {result.msg} &#10;
@@ -177,6 +196,51 @@ export function apply(ctx: Context,config: Config) {
         </>
       }
     }
+  })
+
+  ctx.command('bella/workstart', '开始通过打工获取积分(最少半小时最多8个小时)', { minInterval: Time.minute }).alias('开始打工')
+  .action(async ({session}) => {
+    let working = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.working;
+    let nowTime:number = Math.floor(Date.now()/1000/60)
+    if (working) return <>打工任务正在进行，可以使用"结束打工"结束任务</>
+    else {
+      await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), working: true, stime: nowTime}]);
+      return <>{session.username}打工开始^v^&#10;Tip: 打工时间最少半小时，最多为8小时哦~</>
+    }
+  })
+  ctx.command('bella/workend', '结束打工(最少半小时最多8个小时)', { minInterval: Time.minute }).alias('结束打工')
+  .action(async ({session}) => {
+    let all_point = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.point;
+    let working = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.working;
+    let stime = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.stime;
+    let wpoint = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.wpoint;
+    let nowTime:number = Math.floor(Date.now()/1000/60)
+    if(working) {
+      await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), working: false}]);
+      var time:number = nowTime-stime;
+      time = time>=8*60? 8*60:time;
+      var point:number = time<30? 0:Math.floor((time/2)*(levelJudge(all_point).level));
+      await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), point: all_point+point, wpoint: wpoint+point}]);
+      return <>{session.username}打工结束啦！&#10;本次打工{Math.floor(time/60)}小时{time%60}分钟&#10;获得积分:{point}</>
+    }
+    else
+      return <>你还没有正在进行的打工任务哦,使用"开始打工"命令可以进行打工哦</>
+  })
+  ctx.command('bella/workcheck', '查询打工情况', { minInterval: Time.minute }).alias('打工查询')
+  .action(async ({session}) => {
+    let all_point = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.point;
+    let working = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.working;
+    let stime = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.stime;
+    let wpoint = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.wpoint;
+    let nowTime:number = Math.floor(Date.now()/1000/60)
+    var time:number = nowTime-stime;
+    time = time>=8*60? 8*60:time;
+    return <>
+    {session.username}{working? '正在打工':'当前没有打工'}&#10;
+    打工时间: {working? `${Math.floor(time/60)}小时${time%60}分钟`:'暂无信息'}&#10;
+    可获积分: {working? time<30? 0:Math.floor((time/2)*(levelJudge(all_point).level)) :0}&#10;
+    打工总获得积分: {wpoint? wpoint:0}
+    </>
   })
 }
 
