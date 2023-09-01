@@ -122,7 +122,7 @@ export function apply(ctx: Context,config: Config) {
         <at id={session.userId} />签到成功!&#10;{signText}&#10;获得积分：{signpoint}
         </>
       else if (!session.isDirect) 
-          return render(session.username,true,signpoint,1,signTime,signpoint,ctx,config);
+          return render(session.username,true,signpoint,1,signTime,signpoint,ctx,config.imgurl);
     }
     if (Number(time.slice(8,10)) - Number(signTime.slice(8,10)) && !session.isDirect) {
       await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), time: signTime, point: Number(all_point+signpoint), count: count+1, current_point: Number(signpoint) }]);
@@ -132,14 +132,14 @@ export function apply(ctx: Context,config: Config) {
         <at id={session.userId} />签到成功!&#10;{signText}&#10;获得积分：{signpoint}
         </>
       else if (!session.isDirect) 
-          return render(session.username,true,all_point+signpoint,count+1,signTime,signpoint,ctx,config);
+          return render(session.username,true,all_point+signpoint,count+1,signTime,signpoint,ctx,config.imgurl);
     }
     if (!session.isDirect && options.text)
       return <>
       <at id={session.userId} />今天已经签到过了哦，明天再来吧！&#10;本次获得积分: {current_point? current_point:'暂无数据'}
       </>
     else if (!session.isDirect)
-      return render(session.username,false,all_point,count,time,current_point,ctx,config);
+      return render(session.username,false,all_point,count,time,current_point,ctx,config.imgurl);
   })
 
   ctx.command('bella/signinquery','贝拉签到积分查询',{ minInterval: Time.minute }).alias('签到查询').alias('积分查询')
@@ -158,7 +158,7 @@ export function apply(ctx: Context,config: Config) {
       本次获得积分: {current_point? current_point:'暂无数据'}
       </>
     else if (!session.isDirect) 
-      return render(session.username,false,all_point,count,time,current_point,ctx,config);
+      return render(session.username,false,all_point,count,time,current_point,ctx,config.imgurl);
   })
   // 抽奖部分
   ctx.command('bella/lottery <count:number>', '贝拉抽奖！通过消耗签到积分抽奖', { minInterval: Time.minute }).alias('抽奖')
@@ -202,7 +202,7 @@ export function apply(ctx: Context,config: Config) {
   .action(async ({session}) => {
     let working = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.working;
     let nowTime:number = Math.floor(Date.now()/1000/60)
-    if (working) return <>打工任务正在进行，可以使用"结束打工"结束任务</>
+    if (working) return <>{session.username}打工任务正在进行，可以使用"结束打工"结束任务</>
     else {
       await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), working: true, stime: nowTime}]);
       return <>{session.username}打工开始^v^&#10;Tip: 打工时间最少半小时，最多为8小时哦~</>
@@ -224,7 +224,7 @@ export function apply(ctx: Context,config: Config) {
       return <>{session.username}打工结束啦！&#10;本次打工{Math.floor(time/60)}小时{time%60}分钟&#10;获得积分:{point}</>
     }
     else
-      return <>你还没有正在进行的打工任务哦,使用"开始打工"命令可以进行打工哦</>
+      return <>{session.username}还没有正在进行的打工任务哦,使用"开始打工"命令可以进行打工哦</>
   })
   ctx.command('bella/workcheck', '查询打工情况', { minInterval: Time.minute }).alias('打工查询')
   .action(async ({session}) => {
@@ -254,7 +254,7 @@ function pointJudge(point:number) {
   return msg;
 }
 
-async function render(uname:string,signin:boolean,all_point:number,count:number,last_sign:string,current_point:string|number,ctx: Context,cfg:Config) {
+async function render(uname:string,signin:boolean,all_point:number,count:number,last_sign:string,current_point:string|number,ctx: Context,cfg:string) {
   var getword = await ctx.http.get('https://v1.hitokoto.cn/?c=b')
   let word = getword.hitokoto;
   let author = getword.from;
@@ -262,7 +262,7 @@ async function render(uname:string,signin:boolean,all_point:number,count:number,
   return <html>
   <div style={{width:'720px'}}>
     <div style={{width: '720px'}}>
-        <img style={{width: '100%',display: 'flex','align-items': 'center'}} src={cfg.imgurl} />
+        <img style={{width: '100%',display: 'flex','align-items': 'center'}} src={cfg} />
     </div>
     <div style={{width: '720px',margin: '1rem'}}>
     <div style={{width: '100%',height:'6.2rem',display: 'flex'}}>
@@ -335,7 +335,7 @@ function rangePoint(count:number) {
     case 4: result.final_point = Math.floor(count*1.5); result.msg = "哇哦！欧皇！";break;
     case 5: result.final_point = Math.floor(count*2.0); result.msg = "双倍泰裤辣！";break;
     case 6: result.final_point = (Random.bool(0.5))? Math.floor(count*3.0):count; result.msg = (result.final_point-count)? "3倍！这是甚么运气！": "欸嘿，虚晃一枪!";break;
-    case 7: result.final_point = (Random.bool(0.2))? Math.floor(count*4.0):count; result.msg = (result.final_point-count)? "太可怕了！是有什么欧皇秘诀吗": "欸嘿，虚晃一枪!";break;
+    case 7: result.final_point = (Random.bool(0.3))? Math.floor(count*4.0):count; result.msg = (result.final_point-count)? "太可怕了！是有什么欧皇秘诀吗": "欸嘿，虚晃一枪!";break;
     default: result.final_point = count; result.msg = "欸嘿，虚晃一枪!";break;
   }
   return result;
