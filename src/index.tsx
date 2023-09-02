@@ -152,7 +152,7 @@ export function apply(ctx: Context,config: Config) {
     if (!session.isDirect && options.text)
       return <>
       <at id={session.userId} />签到信息如下: &#10;
-      签到总积分: {all_point} &#10;
+      当前积分: {all_point} &#10;
       签到次数: {count}&#10;
       本次签到时间: {time}&#10;
       本次获得积分: {current_point? current_point:'暂无数据'}
@@ -167,7 +167,7 @@ export function apply(ctx: Context,config: Config) {
     if (!count) {logger.info(`用户{${session.username}(${session.userId})} 参数错误!`);return '请输入有效积分';}
     else if (all_point-count<0) {logger.info(`用户{${session.username}(${session.userId})} 积分不足!`); return '您的积分不足';}
     else {
-      if(Random.bool(0.4))  {
+      if(Random.bool(0.6))  {
         var result:any = rangePoint(count);
         await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), point: Number(all_point-count+result.final_point) }]);
         logger.info(`用户{${session.username}(${session.userId})} 消耗${count}积分获得${result.final_point}积分!`);
@@ -286,8 +286,9 @@ async function render(uname:string,signin:boolean,all_point:number,count:number,
     </div>
     <div style={{width: '100%',display: 'flex'}}>
         <div style={{width: '50%','font-size': '1.1rem'}}>
-            <p>本次获得积分: {current_point}<br/>
-            签到总积分: {all_point}<br/>
+            <p>
+            本次获得积分: {current_point}<br/>
+            当前积分: {all_point}<br/>
             签到等级: {levelJudge(all_point).level}<br/>
             签到次数: {count}<br/>
             本次签到时间:<br/>{last_sign}</p>
