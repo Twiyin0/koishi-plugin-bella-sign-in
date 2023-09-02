@@ -161,7 +161,7 @@ export function apply(ctx: Context,config: Config) {
       return render(session.username,false,all_point,count,time,current_point,ctx,config.imgurl);
   })
   // 抽奖部分
-  ctx.command('bella/lottery <count:number>', '贝拉抽奖！通过消耗签到积分抽奖', { minInterval: Time.minute }).alias('抽奖')
+  ctx.command('bella/lottery <count:number>', '贝拉抽奖！通过消耗签到积分抽奖', { minInterval: 0.2*Time.minute }).alias('抽奖')
   .action(async ({session},count) => {
     let all_point:number = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.point;
     if (!count) {logger.info(`用户{${session.username}(${session.userId})} 参数错误!`);return '请输入有效积分';}
@@ -198,7 +198,7 @@ export function apply(ctx: Context,config: Config) {
     }
   })
 
-  ctx.command('bella/workstart', '开始通过打工获取积分(最少半小时最多8个小时)', { minInterval: Time.minute }).alias('开始打工')
+  ctx.command('bella/workstart', '开始通过打工获取积分(最少半小时最多8个小时)', { minInterval: 0.5*Time.minute }).alias('开始打工')
   .action(async ({session}) => {
     let working = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.working;
     let nowTime:number = Math.floor(Date.now()/1000/60)
@@ -208,7 +208,7 @@ export function apply(ctx: Context,config: Config) {
       return <>{session.username}打工开始^v^&#10;Tip: 打工时间最少半小时，最多为8小时哦~</>
     }
   })
-  ctx.command('bella/workend', '结束打工(最少半小时最多8个小时)', { minInterval: Time.minute }).alias('结束打工')
+  ctx.command('bella/workend', '结束打工(最少半小时最多8个小时)', { minInterval: 0.3*Time.minute }).alias('结束打工')
   .action(async ({session}) => {
     let all_point = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.point;
     let working = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.working;
@@ -226,7 +226,7 @@ export function apply(ctx: Context,config: Config) {
     else
       return <>{session.username}还没有正在进行的打工任务哦,使用"开始打工"命令可以进行打工哦</>
   })
-  ctx.command('bella/workcheck', '查询打工情况', { minInterval: Time.minute }).alias('打工查询')
+  ctx.command('bella/workcheck', '查询打工情况', { minInterval: 0.1*Time.minute }).alias('打工查询')
   .action(async ({session}) => {
     let all_point = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.point;
     let working = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.working;
@@ -259,23 +259,23 @@ async function render(uname:string,signin:boolean,all_point:number,count:number,
   let word = getword.hitokoto;
   let author = getword.from;
   let lvline = levelJudge(all_point).level_line;
-  return <html>
-  <div style={{width:'720px'}}>
-    <div style={{width: '720px'}}>
-        <img style={{width: '100%',display: 'flex','align-items': 'center'}} src={cfg} />
+  return <html style={{width:'360px'}}>
+  <div style={{width:'100%'}}>
+    <div style={{width: '100%'}}>
+        <img style={{width: '100%'}} src={cfg} />
     </div>
-    <div style={{width: '720px',margin: '1rem'}}>
-    <div style={{width: '100%',height:'6.2rem',display: 'flex'}}>
-        <div style={{width: '75%',height: '100%'}}>
-            <p style={{color:'black','font-size': '2.5rem'}}><strong>{signin? '签到成功!':'本次已签!'}</strong></p>
+    <div style={{width: '100%',margin: '5px'}}>
+    <div style={{width: '100%',height:'4.0rem',display: 'flex'}}>
+        <div style={{width: '65%',height: '100%'}}>
+            <p style={{color:'black','font-size': '1.6rem'}}><strong>{signin? '签到成功!':'本次已签!'}</strong></p>
         </div>
-        <div style={{width: '25%',height: '100%'}}>
-            <p style={{'font-size': '2.7rem','margin-left': '40%'}}> {`${new Date().getMonth()+1}/${new Date().getDate()}`} </p>
+        <div style={{width: '35%',height: '100%'}}>
+            <p style={{'font-size': '1.8rem','margin-left': '15%'}}> {`${new Date().getMonth()+1}月${new Date().getDate()}日`} </p>
         </div>
     </div>
-    <div style={{width: '720px',height: 'auto'}}>
-        <label for="fuel" style={{color: 'rgb(204, 84, 14)','font-size': '1.8rem'}}>level {levelJudge(all_point).level}</label>
-        <meter id="fuel" style={{width: '96%',height: '52px'}}
+    <div style={{width: '100%',height: 'auto'}}>
+        <label for="fuel" style={{color: 'rgb(204, 84, 14)','font-size': '1.4rem'}}>level {levelJudge(all_point).level}</label>
+        <meter id="fuel" style={{width: '97%',height: '32px'}}
         min="0"
         max={String(lvline)}
         low={String(lvline*0.7)}
@@ -284,15 +284,15 @@ async function render(uname:string,signin:boolean,all_point:number,count:number,
         value={String(all_point)}
       ></meter>
     </div>
-    <div style={{width: '720px',display: 'flex'}}>
-        <div style={{width: '50%','font-size': '1.8rem'}}>
+    <div style={{width: '100%',display: 'flex'}}>
+        <div style={{width: '50%','font-size': '1.1rem'}}>
             <p>本次获得积分: {current_point}<br/>
             签到总积分: {all_point}<br/>
             签到等级: {levelJudge(all_point).level}<br/>
             签到次数: {count}<br/>
-            本次签到时间: {last_sign}</p>
+            本次签到时间:<br/>{last_sign}</p>
         </div>
-        <div style={{width: '46%','font-size': '1.4rem'}}>
+        <div style={{width: '46%','font-size': '1.0rem'}}>
           <p><strong>{getGreeting(new Date().getHours())},{uname}</strong></p>
           <p>{word}</p>
           <p>---来自《{author}》</p>
@@ -322,18 +322,18 @@ function getGreeting(hour: number): string {
 }
 
 function rangePoint(count:number) {
-  var cnt = Random.pick([0,1,2,3,4,5,6,7,8])  // 0.2 0.5 0.8 1.2 1.5 2.0 3.0 4.0
+  var cnt = Random.int(0,8)  // 0.2 0.5 0.8 1.2 1.5 2.0 3.0 4.0 1.0
   let result = {
     final_point: 0,
     msg: 'string'
   }
   switch(cnt) {
-    case 0: result.final_point = Math.floor(count*0.2); result.msg = "哈哈，赌狗！"; break;
-    case 1: result.final_point = Math.floor(count*0.5); result.msg = "伤害减半！";break;
-    case 2: result.final_point = Math.floor(count*0.8); result.msg = "不过如此";break;
-    case 3: result.final_point = Math.floor(count*1.2); result.msg = "运气不错！";break;
-    case 4: result.final_point = Math.floor(count*1.5); result.msg = "哇哦！欧皇！";break;
-    case 5: result.final_point = Math.floor(count*2.0); result.msg = "双倍泰裤辣！";break;
+    case 0: result = {final_point: Math.floor(count*0.2), msg: "哈哈，赌狗！"}; break;
+    case 1: result = {final_point: Math.floor(count*0.5), msg:  "伤害减半！"};  break;
+    case 2: result = {final_point: Math.floor(count*0.8), msg: "不过如此"};     break;
+    case 3: result = {final_point: Math.floor(count*1.2), msg: "运气不错！"};   break;
+    case 4: result = {final_point: Math.floor(count*1.5), msg: "哇哦！欧皇！"}; break;
+    case 5: result = {final_point: Math.floor(count*2.0), msg: "双倍泰裤辣！"}; break;
     case 6: result.final_point = (Random.bool(0.5))? Math.floor(count*3.0):count; result.msg = (result.final_point-count)? "3倍！这是甚么运气！": "欸嘿，虚晃一枪!";break;
     case 7: result.final_point = (Random.bool(0.3))? Math.floor(count*4.0):count; result.msg = (result.final_point-count)? "太可怕了！是有什么欧皇秘诀吗": "欸嘿，虚晃一枪!";break;
     default: result.final_point = count; result.msg = "欸嘿，虚晃一枪!";break;
