@@ -330,7 +330,7 @@ function rangePoint(count:number) {
   }
   switch(cnt) {
     case 0: result = {final_point: Math.floor(count*0.2), msg: "哈哈，赌狗！"}; break;
-    case 1: result = {final_point: Math.floor(count*0.5), msg:  "伤害减半！"};  break;
+    case 1: result = {final_point: Math.floor(count*0.5), msg: "伤害减半！"};   break;
     case 2: result = {final_point: Math.floor(count*0.8), msg: "不过如此"};     break;
     case 3: result = {final_point: Math.floor(count*1.2), msg: "运气不错！"};   break;
     case 4: result = {final_point: Math.floor(count*1.5), msg: "哇哦！欧皇！"}; break;
