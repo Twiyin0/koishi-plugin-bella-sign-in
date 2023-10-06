@@ -1,6 +1,5 @@
 import { Context, Schema, Time, Random, Logger } from 'koishi'
 import { } from '@koishijs/plugin-rate-limit'
-import { Session } from 'inspector'
 
 export const name = 'bella-sign-in'
 
@@ -212,7 +211,7 @@ export function apply(ctx: Context,config: Config) {
     }
   })
   // 打工部分
-  ctx.command('bella/workstart', '开始通过打工获取积分(最少半小时最多8个小时)', { minInterval: 0.5*Time.minute }).alias('开始打工')
+  ctx.command('bella/workstart', '开始通过打工获取积分', { minInterval: 0.5*Time.minute }).alias('开始打工')
   .action(async ({session}) => {
     let working = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.working;
     let nowTime:number = Math.floor(Date.now()/1000/60)
@@ -222,7 +221,7 @@ export function apply(ctx: Context,config: Config) {
       return <>{session.username}打工开始^v^&#10;Tip: 打工时间最少半小时，最多为8小时哦~</>
     }
   })
-  ctx.command('bella/workend', '结束打工(最少半小时最多8个小时)', { minInterval: 0.3*Time.minute }).alias('结束打工')
+  ctx.command('bella/workend', '结束打工', { minInterval: 0.3*Time.minute }).alias('结束打工')
   .action(async ({session}) => {
     let all_point = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.point;
     let working = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.working;
@@ -234,7 +233,7 @@ export function apply(ctx: Context,config: Config) {
     if(working) {
       await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), working: false}]);
       var time:number = nowTime-stime;
-      time = wktimecard? time>=(8+wktimecard)*60? 8*60:time:time>=8*60? 8*60:time;
+      time = wktimecard? time>=(8+wktimecard)*60? (8+wktimecard)*60:time:time>=8*60? 8*60:time;
       var point:number = time<30? 0:wkspeed? Math.floor((time)*(levelJudge(all_point).level)):Math.floor((time/2)*(levelJudge(all_point).level));
       await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), point: all_point+point, wpoint: wpoint+point}]);
       return <>{session.username}打工结束啦！&#10;本次打工{Math.floor(time/60)}小时{time%60}分钟&#10;获得积分:{point}</>
@@ -253,7 +252,7 @@ export function apply(ctx: Context,config: Config) {
     var time:number = nowTime-stime;
     let wktimecard = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.wktimecard;
     let wkspeed = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.wktimespeed;
-    time = wktimecard? time>=(8+wktimecard)*60? 8*60:time:time>=8*60? 8*60:time;
+    time = wktimecard? time>=(8+wktimecard)*60? (8+wktimecard)*60:time:time>=8*60? 8*60:time;
     return <>
     {session.username}{working? '正在打工':'当前没有打工'}&#10;
     打工时间: {working? `${Math.floor(time/60)}小时${time%60}分钟`:'暂无信息'}&#10;
