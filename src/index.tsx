@@ -1,5 +1,6 @@
 import { Context, Schema, Time, Random, Logger } from 'koishi'
 import { } from '@koishijs/plugin-rate-limit'
+import { Session } from 'inspector'
 
 export const name = 'bella-sign-in'
 
@@ -13,18 +14,24 @@ export const usage = `
 `
 
 export interface Config {
+  superuser: string[],
   imgurl: string,
   signpointmax: number,
-  signpointmin: number
+  signpointmin: number,
+  lotteryOdds: number,
 }
 
 export const Config: Schema<Config> = Schema.object({
+  superuser: Schema.array(String)
+  .description('超级用户id'),
   imgurl: Schema.string().role('link').required()
   .description('随机横图api'),
   signpointmin: Schema.number().default(1)
   .description('签到积分随机最小值'),
   signpointmax: Schema.number().default(100)
-  .description('签到积分随机最大值')
+  .description('签到积分随机最大值'),
+  lotteryOdds: Schema.percent().default(0.6)
+  .description('抽奖指令中倍率的概率(默认0.6)')
 })
 
 export const using = ['database','puppeteer']
@@ -46,6 +53,8 @@ export interface Bella_sign_in {
   working: boolean
   stime: number
   wpoint: number
+  wktimecard: number
+  wktimespeed: boolean
 }
 
 interface TimeGreeting {
@@ -75,6 +84,9 @@ const levelInfos: LevelInfo[] = [
   { level: 5, level_line: 30000 },
   { level: 6, level_line: 50000 },
   { level: 7, level_line: 80000 },
+  { level: 8, level_line:170000 },
+  { level: 9, level_line:350000 },
+  { level:10, level_line:800000 },
 ];
 
 export function apply(ctx: Context,config: Config) {
@@ -87,9 +99,11 @@ export function apply(ctx: Context,config: Config) {
     current_point: "unsigned",
     working: "boolean",
     stime: "unsigned",
-    wpoint: "unsigned"
+    wpoint: "unsigned",
+    wktimecard: "unsigned",
+    wktimespeed: "boolean"
   })
-
+  // 主命令
   ctx.command('bella', '^v^贝拉签到-^-', { minInterval: Time.minute })
   .action(async ({session}) => {
     if (!session.isDirect)
@@ -102,7 +116,7 @@ export function apply(ctx: Context,config: Config) {
       workcheck 查看打工情况,别名:打工查询
       </>
   })
-
+  // 签到本体
   ctx.command('bella/signin', '贝拉，签到!!', { minInterval: Time.minute }).alias('签到')
   .option('text','-t 纯文本输出')
   .action(async ({session,options}) => {
@@ -141,7 +155,7 @@ export function apply(ctx: Context,config: Config) {
     else if (!session.isDirect)
       return render(session.username,false,all_point,count,time,current_point,ctx,config.imgurl);
   })
-
+  // 查询命令
   ctx.command('bella/signinquery','贝拉签到积分查询',{ minInterval: Time.minute }).alias('签到查询').alias('积分查询')
   .option('text','-t 纯文本输出')
   .action(async ({session,options}) => {
@@ -162,12 +176,12 @@ export function apply(ctx: Context,config: Config) {
   })
   // 抽奖部分
   ctx.command('bella/lottery <count:number>', '贝拉抽奖！通过消耗签到积分抽奖', { minInterval: 0.2*Time.minute }).alias('抽奖')
-  .action(async ({session},count) => {
+  .action(async ({session},count:number) => {
     let all_point:number = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.point;
-    if (!count) {logger.info(`用户{${session.username}(${session.userId})} 参数错误!`);return '请输入有效积分';}
+    if (!count || count<0) {logger.info(`用户{${session.username}(${session.userId})} 参数错误!`);return '请输入有效积分';}
     else if (all_point-count<0) {logger.info(`用户{${session.username}(${session.userId})} 积分不足!`); return '您的积分不足';}
     else {
-      if(Random.bool(0.6))  {
+      if(Random.bool(config.lotteryOdds)) {
         var result:any = rangePoint(count);
         await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), point: Number(all_point-count+result.final_point) }]);
         logger.info(`用户{${session.username}(${session.userId})} 消耗${count}积分获得${result.final_point}积分!`);
@@ -197,7 +211,7 @@ export function apply(ctx: Context,config: Config) {
       }
     }
   })
-
+  // 打工部分
   ctx.command('bella/workstart', '开始通过打工获取积分(最少半小时最多8个小时)', { minInterval: 0.5*Time.minute }).alias('开始打工')
   .action(async ({session}) => {
     let working = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.working;
@@ -214,18 +228,21 @@ export function apply(ctx: Context,config: Config) {
     let working = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.working;
     let stime = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.stime;
     let wpoint = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.wpoint;
+    let wktimecard = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.wktimecard;
+    let wkspeed = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.wktimespeed;
     let nowTime:number = Math.floor(Date.now()/1000/60)
     if(working) {
       await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), working: false}]);
       var time:number = nowTime-stime;
-      time = time>=8*60? 8*60:time;
-      var point:number = time<30? 0:Math.floor((time/2)*(levelJudge(all_point).level));
+      time = wktimecard? time>=(8+wktimecard)*60? 8*60:time:time>=8*60? 8*60:time;
+      var point:number = time<30? 0:wkspeed? Math.floor((time)*(levelJudge(all_point).level)):Math.floor((time/2)*(levelJudge(all_point).level));
       await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), point: all_point+point, wpoint: wpoint+point}]);
       return <>{session.username}打工结束啦！&#10;本次打工{Math.floor(time/60)}小时{time%60}分钟&#10;获得积分:{point}</>
     }
     else
       return <>{session.username}还没有正在进行的打工任务哦,使用"开始打工"命令可以进行打工哦</>
   })
+  // 打工查询
   ctx.command('bella/workcheck', '查询打工情况', { minInterval: 0.1*Time.minute }).alias('打工查询')
   .action(async ({session}) => {
     let all_point = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.point;
@@ -234,16 +251,51 @@ export function apply(ctx: Context,config: Config) {
     let wpoint = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.wpoint;
     let nowTime:number = Math.floor(Date.now()/1000/60)
     var time:number = nowTime-stime;
-    time = time>=8*60? 8*60:time;
+    let wktimecard = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.wktimecard;
+    let wkspeed = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.wktimespeed;
+    time = wktimecard? time>=(8+wktimecard)*60? 8*60:time:time>=8*60? 8*60:time;
     return <>
     {session.username}{working? '正在打工':'当前没有打工'}&#10;
     打工时间: {working? `${Math.floor(time/60)}小时${time%60}分钟`:'暂无信息'}&#10;
-    可获积分: {working? time<30? 0:Math.floor((time/2)*(levelJudge(all_point).level)) :0}&#10;
+    可获积分: {working? time<30? 0:wkspeed? Math.floor((time)*(levelJudge(all_point).level)):Math.floor((time/2)*(levelJudge(all_point).level)):0}&#10;
     打工总获得积分: {wpoint? wpoint:0}
     </>
   })
+
+  ctx.command('bella/givepoint <count:number> [user:user]', '给予用户积分', { authority: 3 }).alias('补充积分').alias('积分补充')
+  .option('subtract', '-s 减积分')
+  .action(async ({session,options}, count, user) => {
+    let all_point = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.point;
+    if (!user) user = session.userId;
+    if (!count) return <>请输入有效数字</>
+    if (options.subtract && all_point-count<=0) return <>对方没有这么多积分</>
+    else if (config.superuser.includes(session.userId)) {
+      await ctx.database.upsert('bella_sign_in', [{ id: (String(user.replace(/.*:/gi,''))), point: (options.subtract)? all_point-count:all_point+count}]);
+      return <>成功给<at id={user.replace(/.*:/gi,'')}/>{(options.subtract)? "减去":"补充"}{count}点积分.</>
+    }
+    else {
+      return <>没有权限!</>
+    }
+  })
+
+  ctx.command('bella/shop', '贝拉商店').alias('积分商店')
+  .action(async ({session})=>{
+    session.send(<>
+    所有商品: &#10;
+    序号  名称    价格（积分）&#10;
+    1. 打工加时卡 3000&#10;
+    2. 打工翻倍卡 6000&#10;
+    请输入序号购买，$取消购买
+    </>);
+    // 等待用户输入序号
+    let sel = await session.prompt(30000);
+    if (sel=='$') return <>取消购买，欢迎下次光临!</>
+    else
+      return await shopJudge(ctx,session,Number(sel));
+  })
 }
 
+// 辅助函数 //
 function pointJudge(point:number) {
   let msg = '喵？';
   if (point<=10) msg = Random.pick(['今天运势不佳捏','你脸好黑嗷','哇啊啊，非酋！','欸欸欸！怎么会这样呢']);
@@ -270,7 +322,7 @@ async function render(uname:string,signin:boolean,all_point:number,count:number,
             <p style={{color:'black','font-size': '1.6rem'}}><strong>{signin? '签到成功!':'本次已签!'}</strong></p>
         </div>
         <div style={{width: '35%',height: '100%'}}>
-            <p style={{'font-size': '1.8rem','margin-left': '15%'}}> {`${new Date().getMonth()+1}月${new Date().getDate()}日`} </p>
+            <p style={{'font-size': '1.8rem','margin-left': '0%'}}> {`${new Date().getMonth()+1}月${new Date().getDate()}日`} </p>
         </div>
     </div>
     <div style={{width: '100%',height: 'auto'}}>
@@ -335,9 +387,34 @@ function rangePoint(count:number) {
     case 3: result = {final_point: Math.floor(count*1.2), msg: "运气不错！"};   break;
     case 4: result = {final_point: Math.floor(count*1.5), msg: "哇哦！欧皇！"}; break;
     case 5: result = {final_point: Math.floor(count*2.0), msg: "双倍泰裤辣！"}; break;
-    case 6: result.final_point = (Random.bool(0.5))? Math.floor(count*3.0):count; result.msg = (result.final_point-count)? "3倍！这是甚么运气！": "欸嘿，虚晃一枪!";break;
-    case 7: result.final_point = (Random.bool(0.3))? Math.floor(count*4.0):count; result.msg = (result.final_point-count)? "太可怕了！是有什么欧皇秘诀吗": "欸嘿，虚晃一枪!";break;
-    default: result.final_point = count; result.msg = "欸嘿，虚晃一枪!";break;
+    case 6: result.final_point = (Random.bool(0.5))? Math.floor(count*3.0):count; result.msg = (result.final_point-count)? "3倍！这是甚么运气！": "欸嘿，虚晃一枪!"; break;
+    case 7: result.final_point = (Random.bool(0.3))? Math.floor(count*4.0):count; result.msg = (result.final_point-count)? "太可怕了！是有什么欧皇秘诀吗": "欸嘿，虚晃一枪!"; break;
+    default: result.final_point = count; result.msg = "欸嘿，虚晃一枪!"; break;
   }
+
   return result;
+}
+
+async function shopJudge(ctx:Context, session:any, select:number|string) {
+  let wktimecard = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.wktimecard;
+  let wktimespeed = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.wktimespeed;
+  let all_point = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.point;
+
+  if (Number(select)==1) {
+    var point_condition = (all_point-3000 >= 0)? true:false;
+    var shop_cnt = wktimecard<=8? true:false;
+    if (point_condition && shop_cnt) {
+      await ctx.database.upsert('bella_sign_in', [{ id: String(session.userId), point: all_point-3000, wktimecard: wktimecard+1}]);
+      return '购买成功！打工时长上限+1h(上限不得超过8h)'
+    } else if (!point_condition) return '积分不足!';
+    else return '购买次数达到上限'
+  }
+  if (Number(select)==2) {
+    var point_condition = (all_point-6000 >= 0)? true:false;
+    if (point_condition && !wktimespeed) {
+      await ctx.database.upsert('bella_sign_in', [{ id: String(session.userId), point: all_point-3000, wktimespeed: true}]);
+      return '购买成功！打工获取积分翻倍（购买后永久生效）'
+    } else if (wktimespeed) return '您已购买此商品'
+    else return '积分不足!'
+  }
 }
