@@ -110,9 +110,11 @@ export function apply(ctx: Context,config: Config) {
       signin 签到获得积分,别名:签到&#10;
       signinquery 签到信息查询,别名:签到查询&#10;
       lottery 积分抽奖,别名:抽奖&#10;
-      workstart 开始打工(0.5~8小时),别名:开始打工&#10;
+      workstart 开始打工(0.5~8(+8)小时),别名:开始打工&#10;
       workend 结束打工获取积分(与等级相关)别名:结束打工&#10;
-      workcheck 查看打工情况,别名:打工查询
+      workcheck 查看打工情况,别名:打工查询&#10;
+      givepoint 积分补充,给自己或别人补充积分&#10;
+      shop   积分商店，可以买一些可用的东西&#10;
       </>
   })
   // 签到本体
@@ -214,11 +216,12 @@ export function apply(ctx: Context,config: Config) {
   ctx.command('bella/workstart', '开始通过打工获取积分', { minInterval: 0.5*Time.minute }).alias('开始打工')
   .action(async ({session}) => {
     let working = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.working;
+    let wktimecard = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.wktimecard;
     let nowTime:number = Math.floor(Date.now()/1000/60)
     if (working) return <>{session.username}打工任务正在进行，可以使用"结束打工"结束任务</>
     else {
       await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), working: true, stime: nowTime}]);
-      return <>{session.username}打工开始^v^&#10;Tip: 打工时间最少半小时，最多为8小时哦~</>
+      return <>{session.username}打工开始^v^&#10;Tip: 打工时间最少半小时，最多为{8+wktimecard}小时哦~</>
     }
   })
   ctx.command('bella/workend', '结束打工', { minInterval: 0.3*Time.minute }).alias('结束打工')
@@ -233,8 +236,8 @@ export function apply(ctx: Context,config: Config) {
     if(working) {
       await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), working: false}]);
       var time:number = nowTime-stime;
-      time = wktimecard? time>=(8+wktimecard)*60? (8+wktimecard)*60:time:time>=8*60? 8*60:time;
-      var point:number = time<30? 0:wkspeed? Math.floor((time)*(levelJudge(all_point).level)):Math.floor((time/2)*(levelJudge(all_point).level));
+      time = wktimecard? (time>=(8+wktimecard)*60? (8+wktimecard)*60:time):(time>=8*60? 8*60:time);
+      var point:number = time<30? 0:(wkspeed? Math.floor((time)*(levelJudge(all_point).level)):Math.floor((time/2)*(levelJudge(all_point).level)));
       await ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), point: all_point+point, wpoint: wpoint+point}]);
       return <>{session.username}打工结束啦！&#10;本次打工{Math.floor(time/60)}小时{time%60}分钟&#10;获得积分:{point}</>
     }
@@ -252,11 +255,11 @@ export function apply(ctx: Context,config: Config) {
     var time:number = nowTime-stime;
     let wktimecard = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.wktimecard;
     let wkspeed = (await ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.wktimespeed;
-    time = wktimecard? time>=(8+wktimecard)*60? (8+wktimecard)*60:time:time>=8*60? 8*60:time;
+    time = wktimecard? (time>=(8+wktimecard)*60? (8+wktimecard)*60:time):(time>=8*60? 8*60:time);
     return <>
     {session.username}{working? '正在打工':'当前没有打工'}&#10;
     打工时间: {working? `${Math.floor(time/60)}小时${time%60}分钟`:'暂无信息'}&#10;
-    可获积分: {working? time<30? 0:wkspeed? Math.floor((time)*(levelJudge(all_point).level)):Math.floor((time/2)*(levelJudge(all_point).level)):0}&#10;
+    可获积分: {working? (time<30? 0:(wkspeed? Math.floor((time)*(levelJudge(all_point).level)):Math.floor((time/2)*(levelJudge(all_point).level)))):0}&#10;
     打工总获得积分: {wpoint? wpoint:0}
     </>
   })
