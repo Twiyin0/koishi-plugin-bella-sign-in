@@ -110,7 +110,7 @@ export function apply(ctx: Context,config: Config) {
       signin 签到获得积分,别名:签到&#10;
       signinquery 签到信息查询,别名:签到查询&#10;
       lottery 积分抽奖,别名:抽奖&#10;
-      workstart 开始打工(0.5~8(+8)小时),别名:开始打工&#10;
+      workstart 开始打工(0.5~8(+9)小时),别名:开始打工&#10;
       workend 结束打工获取积分(与等级相关)别名:结束打工&#10;
       workcheck 查看打工情况,别名:打工查询&#10;
       givepoint 积分补充,给自己或别人补充积分&#10;
@@ -282,18 +282,23 @@ export function apply(ctx: Context,config: Config) {
 
   ctx.command('bella/shop', '贝拉商店').alias('积分商店')
   .action(async ({session})=>{
-    session.send(<>
-    所有商品: &#10;
-    序号  名称    价格（积分）&#10;
-    1. 打工加时卡 3000&#10;
-    2. 打工翻倍卡 6000&#10;
-    请输入序号购买，$取消购买
-    </>);
-    // 等待用户输入序号
-    let sel = await session.prompt(30000);
-    if (sel=='$') return <>取消购买，欢迎下次光临!</>
-    else
-      return await shopJudge(ctx,session,Number(sel));
+    var shoptimes = 5;
+    await session.send(<>
+      所有商品: &#10;
+      序号  名称    价格（积分）&#10;
+      1. 打工加时卡 3000&#10;
+      2. 打工翻倍卡 6000&#10;
+      请输入序号购买，$取消购买
+      </>);
+    while (shoptimes) {
+      // 等待用户输入序号
+      let sel = await session.prompt(30000);
+      if (sel=='$') return <>取消购买，欢迎下次光临!</>
+      else
+        await session.send(<>{await shopJudge(ctx,session,Number(sel))}&#10;可以继续输入序号购买商品哦~(最多5次)</>);
+      shoptimes--;
+    }
+    return <>连续购买次数上限，请重新使用"积分商店"命令</>
   })
 }
 
@@ -407,7 +412,7 @@ async function shopJudge(ctx:Context, session:any, select:number|string) {
     var shop_cnt = wktimecard<=8? true:false;
     if (point_condition && shop_cnt) {
       await ctx.database.upsert('bella_sign_in', [{ id: String(session.userId), point: all_point-3000, wktimecard: wktimecard+1}]);
-      return '购买成功！打工时长上限+1h(上限不得超过8h)'
+      return '购买成功！打工时长上限+1h(上限不得超过9h)'
     } else if (!point_condition) return '积分不足!';
     else return '购买次数达到上限'
   }
