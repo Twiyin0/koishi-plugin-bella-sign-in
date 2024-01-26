@@ -1,5 +1,5 @@
 import { Context, Schema, Time, Random, Logger } from 'koishi'
-import { } from '@koishijs/plugin-rate-limit'
+import { } from "koishi-plugin-rate-limit"
 
 export const name = 'bella-sign-in'
 
@@ -23,7 +23,7 @@ export interface Config {
 export const Config: Schema<Config> = Schema.object({
   superuser: Schema.array(String)
   .description('超级用户id'),
-  imgurl: Schema.string().role('link').required()
+  imgurl: Schema.string().role('link')
   .description('随机横图api'),
   signpointmin: Schema.number().default(1)
   .description('签到积分随机最小值'),
@@ -88,21 +88,22 @@ const levelInfos: LevelInfo[] = [
   { level:10, level_line:800000 },
 ];
 
-export function apply(ctx: Context,config: Config) {
-  // 数据库创建新表
-  ctx.database.extend("bella_sign_in", {
-    id: "string",
-    time: "string",
-    point: "unsigned",
-    count: "unsigned",
-    current_point: "unsigned",
-    working: "boolean",
-    stime: "unsigned",
-    wpoint: "unsigned",
-    wktimecard: "unsigned",
-    wktimespeed: "boolean"
-  })
-  // 主命令
+
+export function apply(ctx: Context, config: Config) {
+    // 数据库创建新表
+    ctx.database.extend("bella_sign_in", {
+      id: "string",
+      time: "string",
+      point: "unsigned",
+      count: "unsigned",
+      current_point: "unsigned",
+      working: "boolean",
+      stime: "unsigned",
+      wpoint: "unsigned",
+      wktimecard: "unsigned",
+      wktimespeed: "boolean"
+    })
+    // 主命令
   ctx.command('bella', '^v^贝拉签到-^-', { minInterval: Time.minute })
   .action(async ({session}) => {
     if (!session.isDirect)
@@ -273,7 +274,7 @@ export function apply(ctx: Context,config: Config) {
     if (options.subtract && all_point-count<=0) return <>对方没有这么多积分</>
     else if (config.superuser.includes(session.userId)) {
       await ctx.database.upsert('bella_sign_in', [{ id: (String(user.replace(/.*:/gi,''))), point: (options.subtract)? all_point-count:all_point+count}]);
-      return <>成功给<at id={user.replace(/.*:/gi,'')}/>{(options.subtract)? "减去":"补充"}{count}点积分.</>
+      return <>成功给<at id={user.replace(/.*:/gi,'')? user:user.replace(/.*:/gi,'')}/>{(options.subtract)? "减去":"补充"}{count}点积分.</>
     }
     else {
       return <>没有权限!</>
@@ -321,7 +322,7 @@ async function render(uname:string,signin:boolean,all_point:number,count:number,
   return <html style={{width:'360px'}}>
   <div style={{width:'100%'}}>
     <div style={{width: '100%'}}>
-        <img style={{width: '100%'}} src={cfg} />
+        <div style={{width: '100%'}}><img src={cfg} /></div>
     </div>
     <div style={{width: '100%',margin: '5px'}}>
     <div style={{width: '100%',height:'4.0rem',display: 'flex'}}>
