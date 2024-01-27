@@ -355,7 +355,7 @@ async function render(uname:string,signin:boolean,all_point:number,count:number,
   return <html style={{width:'360px'}}>
   <div style={{width:'100%'}}>
     <div style={{width: '100%'}}>
-        <div style={{width: '100%'}}><img src={cfg} /></div>
+        <image style={{width: '100%'}} src={cfg} />
     </div>
     <div style={{width: '100%',margin: '5px'}}>
     <div style={{width: '100%',height:'4.0rem',display: 'flex'}}>
