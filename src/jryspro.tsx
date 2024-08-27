@@ -30,27 +30,4 @@ export class jryspro {
         else
           return jrysJson[todayJrys];
     }
-
-    async getFolderImg(folder:String) {
-      let imgfilename:any = this.readFilenames(folder);
-      const filteredArr = imgfilename.filter((filename) => {
-        return /\.(png|jpg|jpeg|ico|svg)$/i.test(filename);
-      });
-      return filteredArr;
-    }
-    
-    // 递归获取文件夹内所有文件的文件名
-    async readFilenames(dirPath:any) {
-      let filenames = [];
-      const files = fs.readdirSync(dirPath);
-      files.forEach((filename) => {
-        const fullPath = path.join(dirPath, filename);
-        if (fs.statSync(fullPath).isDirectory()) {
-          filenames = filenames.concat(this.readFilenames(fullPath));
-        } else {
-          filenames.push(filename);
-        }
-      });
-      return filenames;
-    }
 }

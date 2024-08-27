@@ -93,6 +93,7 @@ export class Signin {
     let count = (await this.ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.count;
     let dbname = (await this.ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.name;
     let signpoint = Random.int(this.cfg.signpointmin,this.cfg.signpointmax);
+    let nowPoint = (await this.ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.current_point;
     if (!dbname) await this.ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), name: name }]);
     if (!all_point && !time) {
         await this.ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), name: name, time: signTime, point: Number(signpoint), count: 1, current_point: Number(signpoint) }]);
@@ -104,7 +105,7 @@ export class Signin {
         // logger.info(`${name}(${session.userId}) 签到成功！`)
         return { "cmd":"get", "status": 1, "getpoint": signpoint, "signTime": signTime, "allpoint": all_point+signpoint, "count": count+1 };
     }
-    return { "cmd":"get", "status": 0, "getpoint": signpoint, "signTime": signTime, "allpoint": all_point, "count": count };
+    return { "cmd":"get", "status": 0, "getpoint": nowPoint, "signTime": signTime, "allpoint": all_point, "count": count };
   }
 
   // 参数：session， 返回：json
@@ -246,7 +247,7 @@ export class Signin {
     while (shoptimes) {
       // 等待用户输入序号
       let sel = await session.prompt(30000);
-      if (sel=='$' || sel=='￥') return <>取消购买，欢迎下次光临!</>
+      if (sel=='$' || sel=='￥' || !sel) return <>取消购买，欢迎下次光临!</>
       else
         await session.send(<>{await this.shopJudge(session ,Number(sel))}&#10;可以继续输入序号购买商品哦~(最多5次)</>);
       shoptimes--;

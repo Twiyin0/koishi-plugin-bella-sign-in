@@ -133,6 +133,8 @@ export function apply(ctx: Context, config: Config) {
     } catch (err) {
       logger.error(`[bella-sign-in Error]:\r\n`+err);
       return <>哪里出的问题！md跟你爆了！</>
+    } finally {
+      await page?.close();
     }
   })
 
@@ -165,7 +167,7 @@ export function apply(ctx: Context, config: Config) {
     return result;
   })
   // 积分补充
-  ctx.command('bella/givepoint__ <count:number> [user:user]', '给予用户积分').alias("积分补充").alias("给积分")
+  ctx.command('bella/givepoint <count:number> [user:user]', '给予用户积分', {authority: 3}).alias("积分补充").alias("给积分")
   .option('subtract', '-s 减积分')
   .action(async ({session,options}, count, user) => {
     if (options.subtract) count = -count;

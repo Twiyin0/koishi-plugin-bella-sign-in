@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-bella-sign-in",
   "description": "",
-  "version": "2.0.0",
+  "version": "2.0.6",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -30,7 +30,6 @@
     }
   },
   "license": "MIT",
-  "scripts": {},
   "keywords": [
     "chatbot",
     "koishi",
@@ -40,6 +39,7 @@
     "贝拉bot"
   ],
   "peerDependencies": {
+    "@satorijs/element": "^1.0.0",
     "koishi": "^4.16.0"
   }
 }
