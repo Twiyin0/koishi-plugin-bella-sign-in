@@ -1,7 +1,9 @@
-import { Context, Schema, h, Random, Logger } from 'koishi'
+import { Context, Schema, h, Random, Logger, Session } from 'koishi'
 import { pathToFileURL } from 'url'
+import type {} from "koishi-plugin-monetary"
 import { resolve } from 'path'
 import {} from "koishi-plugin-puppeteer";
+import {} from 'koishi-plugin-rate-limit'
 import { Page } from "puppeteer-core";
 import { Signin } from './signin';
 import { jryspro } from './jryspro';
@@ -11,6 +13,11 @@ import path from 'path'
 export const name = 'bella-sign-in'
 
 export const usage = `
+## 积分迁移至通用货币
+1. 将本插件更新至2.1.0及以上版本
+2. 安装 monetary 插件并启用,使用权限等级大于等于3的管理员对着bot使用命令" bella-tranferData "即可完成迁移  
+3. 迁移命令仅需运行一次即可，本插件币种为"Bella"
+
 ## 更新插件前请停止运行插件
 插件配置项可能会有改动，不停止插件直接更新可能会导致koishi炸掉  
 
@@ -49,16 +56,32 @@ export const Config: Schema<Config> = Schema.object({
   callme: Schema.boolean().default(false)
   .description("启用callme(需要安装callme插件)"),
   waittip: Schema.boolean().default(false)
-  .description("启用渲染提示"),
+  .description("启用渲染提示")
 })
 
-export const inject = ['database','puppeteer']
+export const inject = {
+  required: ['database','puppeteer'],
+  optional: ['monetary']
+}
 
 const logger = new Logger('[贝拉签到]>> ');
 
 export function apply(ctx: Context, config: Config) {
-      // 构建signin类
+  // 构建signin类
   const signin = new Signin(ctx, config);
+
+  ctx.command("bella-tranferData", "通用货币同步(只要执行一次就行)", {authority: 3, maxUsage: 1})
+  .userFields(['name', 'id'])
+  .action(async ({session}) => {
+    if (ctx.monetary) {
+      const data = await ctx.database.get('monetary', {
+        value: { $gt: 0 }
+      })
+      if (data.length === 0)
+        return await transferData(ctx, session);
+      else return <>您已迁移过monetary</>
+    } else return <>你没有启用monetary服务</>
+  })
   // 主命令
   ctx.command("bella", "贝拉菜单").alias("贝拉菜单")
   .action(async ({session}) => {
@@ -81,7 +104,7 @@ export function apply(ctx: Context, config: Config) {
   // 签到命令
   ctx.command("bella/signin", "贝拉签到").alias("签到")
   .option('text','-t 纯文本输出')
-  .userFields(['name'])
+  .userFields(['name', 'id'])
   .action(async ({session, options}) => {
     const jrys = new jryspro();
     const date = new Date();
@@ -140,7 +163,7 @@ export function apply(ctx: Context, config: Config) {
 
   // 抽奖部分
   ctx.command('bella/lottery <count:number>', '贝拉抽奖！通过消耗签到积分抽奖', { minInterval: 0.2*60000 }).alias("抽奖")
-  .userFields(['name'])
+  .userFields(['name', 'id'])
   .action(async ({session},count:number) => {
     const result = await signin.lottery(session, count);
     return result;
@@ -148,26 +171,27 @@ export function apply(ctx: Context, config: Config) {
 
   // 打工部分
   ctx.command('bella/workstart', '开始通过打工获取积分', { minInterval: 0.2*60000 }).alias("开始打工").alias("打工开始")
-  .userFields(['name'])
+  .userFields(['name', 'id'])
   .action(async ({session}) => {
     const result = await signin.workstart(session);
     return result;
   })
   ctx.command('bella/workend', '结束打工', { minInterval: 0.2*60000 }).alias("结束打工").alias("打工结束")
-  .userFields(['name'])
+  .userFields(['name', 'id'])
   .action(async ({session}) => {
     const result = await signin.workend(session);
     return result;
   })
   // 打工查询
   ctx.command('bella/workcheck', '查询打工情况', { minInterval: 0.1*60000 }).alias("打工查询")
-  .userFields(['name'])
+  .userFields(['name', 'id'])
   .action(async ({session}) => {
     const result = await signin.workcheck(session);
     return result;
   })
   // 积分补充
   ctx.command('bella/givepoint <count:number> [user:user]', '给予用户积分', {authority: 3}).alias("积分补充").alias("给积分")
+  .userFields(['name', 'id'])
   .option('subtract', '-s 减积分')
   .action(async ({session,options}, count, user) => {
     if (options.subtract) count = -count;
@@ -178,12 +202,14 @@ export function apply(ctx: Context, config: Config) {
   })
   // 积分商店
   ctx.command('bella/shop', '贝拉商店').alias("积分商店").alias("积分商城")
+  .userFields(['name', 'id'])
   .action(async ({session})=>{
     const result = await signin.shop(session);
     return result;
   })
 
   ctx.command('bella/rank [userCount:number]', '查看积分排行榜(显示前n位最多50)').alias("积分榜").alias("排行榜")
+  .userFields(['name', 'id'])
   .action(async (_, userCount)=>{
     let ucnt = userCount? userCount<50? userCount:50:10;
     const result = await signin.rankUsers(ucnt);
@@ -228,3 +254,28 @@ async function readFilenames(dirPath:string) {
   return filenames;
 }
 
+async function transferData(ctx:Context, session:Session) {
+  try {
+    let orgData = await ctx.database.get('bella_sign_in', {
+      point: { $gt: 0 },
+    })
+    for (const data of orgData) {
+      let bindingInfo = await ctx.database.get('binding', { pid: String(data.id), platform: session.bot.platform });
+    
+      if (bindingInfo.length === 0) {
+        continue;
+      }
+    
+      let uid = bindingInfo[0];
+      let point = data.point;
+
+      if (uid?.aid) {
+        await ctx.monetary.gain(uid.aid, point, "Bella");
+      }
+    }
+    return "[贝拉签到]>> 迁移数据成功！"
+  } catch (err) {
+    logger.error(`[bella-sign-in Error]:\r\n`+err);
+    return "[贝拉签到]>> 迁移数据时发生错误，请查看log！"
+  }
+}

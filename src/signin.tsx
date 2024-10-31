@@ -53,7 +53,10 @@ const levelInfos: LevelInfo[] = [
   { level:10, level_line:800000 },
 ];
 
-export const inject = ['database']
+export const inject = {
+  required: ['database'],
+  optional: ['monetary']
+}
 
 // 参数: ctx:Context, config?:Config
 export class Signin {
@@ -96,11 +99,13 @@ export class Signin {
     let nowPoint = (await this.ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.current_point;
     if (!dbname) await this.ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), name: name }]);
     if (!all_point && !time) {
+        if (this.ctx.monetary) await this.ctx.monetary.gain(session.user.id, signpoint, "Bella");
         await this.ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), name: name, time: signTime, point: Number(signpoint), count: 1, current_point: Number(signpoint) }]);
         // logger.info(`${name}(${session.userId}) 第一次签到成功，写入数据库！`)
         return { "cmd":"get", "status": 1, "getpoint": signpoint, "signTime": signTime, "allpoint": signpoint, "count": 1 };
     }
     if (Number(time.slice(8,10)) - Number(signTime.slice(8,10))) {
+        if (this.ctx.monetary) await this.ctx.monetary.gain(session.user.id, signpoint, "Bella");
         await this.ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), name: name, time: signTime, point: Number(all_point+signpoint), count: count+1, current_point: Number(signpoint) }]);
         // logger.info(`${name}(${session.userId}) 签到成功！`)
         return { "cmd":"get", "status": 1, "getpoint": signpoint, "signTime": signTime, "allpoint": all_point+signpoint, "count": count+1 };
@@ -124,19 +129,22 @@ export class Signin {
   // 参数：session，point 返回：<> <at />string </>
   async lottery(session, point) {
     let all_point:number = (await this.ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.point;
-    if (!point || point < 0 || isNaN(Number(point))) return "清输入有效积分";
+    if (!point || point < 0 || isNaN(Number(point))) return "请输入有效积分";
     else if (all_point-point < 0) return "积分不足!";
     else {
     if(Random.bool(this.cfg.lotteryOdds)) {
+        if (this.ctx.monetary) await this.ctx.monetary.cost(session.user.id, point, "Bella");
         var result:any = this.rangePoint(point);
+        if (this.ctx.monetary) await this.ctx.monetary.gain(session.user.id, result.final_point, "Bella");
         await this.ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), point: Number(all_point-point+result.final_point) }]);
         return <>
         <at id={session.userId}/>&#10;
         {result.msg} &#10;
         消耗{point}积分抽得: {result.final_point}积分
         </>
-        }
-        else {
+    }
+    else {
+        if (this.ctx.monetary) await this.ctx.monetary.cost(session.user.id, point, "Bella");
         await this.ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), point: Number(all_point-point) }]);
         return <>
         <at id={session.userId}/>&#10;
@@ -191,6 +199,8 @@ export class Signin {
       time = wktimecard? (time>=(8+wktimecard)*60? (8+wktimecard)*60:time):(time>=8*60? 8*60:time);
       var point:number = time<30? 0:(wkspeed? Math.floor((time)*(this.levelJudge(all_point).level)):Math.floor((time/2)*(this.levelJudge(all_point).level)));
       await this.ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), point: all_point+point, wpoint: wpoint+point}]);
+      if (this.ctx.monetary) await this.ctx.monetary.gain(session.user.id, point, "Bella");
+      
       return <>{name}打工结束啦！&#10;本次打工{Math.floor(time/60)}小时{time%60}分钟&#10;获得积分:{point}</>
     }
     else
@@ -227,6 +237,7 @@ export class Signin {
     if (!count) return <>请输入有效数字</>
     if (count<0 && all_point-Math.abs(count)<=0) return <>对方没有这么多积分</>
     else if (this.cfg.superuser.includes(session.userId)) {
+      if (this.ctx.monetary) await this.ctx.monetary.gain(session.user.id, count, "Bella");
       await this.ctx.database.upsert('bella_sign_in', [{ id: (String(user.replace(/.*:/gi,''))), point: (count<0)? all_point-Math.abs(count):all_point+count}]);
       return <>成功给<at id={user.replace(/.*:/gi,'')? user:user.replace(/.*:/gi,'')}/>{(count<0)? "减去":"补充"}{count}点积分.</>
     }
@@ -319,6 +330,7 @@ export class Signin {
       var point_condition = (all_point-3000 >= 0)? true:false;
       var shop_cnt = wktimecard<=8? true:false;
       if (point_condition && shop_cnt) {
+        if (this.ctx.monetary) await this.ctx.monetary.cost(session.user.id, 3000, "Bella");
         await this.ctx.database.upsert('bella_sign_in', [{ id: String(session.userId), point: all_point-3000, wktimecard: wktimecard+1}]);
         return '购买成功！打工时长上限+1h(上限不得超过9h)'
       } else if (!point_condition) return '积分不足!';
@@ -327,6 +339,7 @@ export class Signin {
     if (Number(select)==2) {
       var point_condition = (all_point-6000 >= 0)? true:false;
       if (point_condition && !wktimespeed) {
+        if (this.ctx.monetary) await this.ctx.monetary.cost(session.user.id, 3000, "Bella");
         await this.ctx.database.upsert('bella_sign_in', [{ id: String(session.userId), point: all_point-3000, wktimespeed: true}]);
         return '购买成功！打工获取积分翻倍（购买后永久生效）'
       } else if (wktimespeed) return '您已购买此商品'
