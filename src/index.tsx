@@ -153,11 +153,13 @@ export function apply(ctx: Context, config: Config) {
       await page.goto(`file:///${resolve(__dirname, "./index/index.html")}`);
       await page.waitForSelector("#body");
       const element = await page.$("#body");
-      return h.image(await element.screenshot({
+      return h.image(await element.screenshot(config.imgQuality===1? {
+        encoding: "binary",
+      }:{
         type: "jpeg",
         encoding: "binary",
         quality: (config.imgQuality*100)%101
-      }), "image/jpeg")
+      }), "image/png")
     } catch (err) {
       logger.error(`[bella-sign-in Error]:\r\n`+err);
       return <>哪里出的问题！md跟你爆了！</>
