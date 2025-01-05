@@ -40,6 +40,7 @@ export interface Config {
   lotteryOdds: number,
   callme: boolean,
   waittip: boolean,
+  imgQuality: number,
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -56,7 +57,9 @@ export const Config: Schema<Config> = Schema.object({
   callme: Schema.boolean().default(false)
   .description("启用callme(需要安装callme插件)"),
   waittip: Schema.boolean().default(false)
-  .description("启用渲染提示")
+  .description("启用渲染提示"),
+  imgQuality: Schema.percent().default(0.4)
+  .description("输出渲染图质量")
 })
 
 export const inject = {
@@ -151,8 +154,10 @@ export function apply(ctx: Context, config: Config) {
       await page.waitForSelector("#body");
       const element = await page.$("#body");
       return h.image(await element.screenshot({
-              encoding: "binary"
-            }), "image/png")
+        type: "jpeg",
+        encoding: "binary",
+        quality: (config.imgQuality*100)%101
+      }), "image/jpeg")
     } catch (err) {
       logger.error(`[bella-sign-in Error]:\r\n`+err);
       return <>哪里出的问题！md跟你爆了！</>
