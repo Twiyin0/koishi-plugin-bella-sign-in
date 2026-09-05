@@ -8,10 +8,10 @@
     "lib",
     "dist"
   ],
-  "homepage": "https://github.com/twiyin0/koishi-plugin-bella-sign-in.git",
+  "homepage": "https://github.com/Twiyin0/koishi-plugin-bella-sign-in",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/twiyin0/koishi-plugin-bella-sign-in.git"
+    "url": "https://github.com/Twiyin0/koishi-plugin-bella-sign-in"
   },
   "contributors": [
     "Twiyin0 <twiyin0@outlook.com>"
