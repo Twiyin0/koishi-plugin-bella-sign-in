@@ -1,6 +1,5 @@
 import { Context, Time, Random } from 'koishi'
 import type {} from 'koishi-plugin-monetary'
-import { } from "koishi-plugin-rate-limit"
 import {
   getDiceCost,
   getDiceReward,

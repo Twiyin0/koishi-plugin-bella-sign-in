@@ -2,9 +2,8 @@ import { Context, Schema, h, Random, Logger, Session } from 'koishi'
 import { pathToFileURL } from 'url'
 import type {} from "koishi-plugin-monetary"
 import { resolve } from 'path'
-import {} from "koishi-plugin-puppeteer";
-import {} from 'koishi-plugin-rate-limit'
-import { Page } from "puppeteer-core";
+import type {} from 'koishi-plugin-puppeteer'
+import type {} from 'koishi-plugin-rate-limit'
 import { Signin } from './signin';
 import { jryspro } from './jryspro';
 import { getDailyProfile } from './entertainment'
@@ -141,7 +140,7 @@ export function apply(ctx: Context, config: Config) {
 
     if (config.waittip) await session.send("请稍等，正在渲染……");
 
-    let page: Page;
+    let page: Awaited<ReturnType<typeof ctx.puppeteer.page>>;
     try {
       let templateHTML = fs.readFileSync(path.resolve(__dirname, "./index/template.txt"), "utf-8");
       let template = templateHTML.replace("##todayExp##", getSigninJson.getpoint.toString()).replace("##totalExp##", getSigninJson.allpoint.toString())
