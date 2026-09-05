@@ -2,11 +2,10 @@ import { Context, Time, Random } from 'koishi'
 import type {} from 'koishi-plugin-monetary'
 import {
   getDiceCost,
-  getDiceReward,
+  evaluateDice,
   MAX_DICE_COST,
   normalizeRpsChoice,
   parseDiceNotation,
-  pickDiceOutcome,
   playRps,
   randomRpsChoice,
   rollDice,
@@ -243,9 +242,13 @@ export class Signin {
     const allPoint = Number(userData.point || 0)
     if (allPoint < cost) return `本局需要 ${cost} 积分，你目前只有 ${allPoint} 积分。`
 
-    const dice = rollDice(parsed)
-    const outcome = pickDiceOutcome()
-    const reward = getDiceReward(parsed, dice, outcome)
+    let dice = rollDice(parsed)
+    let evaluation = evaluateDice(parsed, dice)
+    while (!evaluation) {
+      dice = rollDice(parsed)
+      evaluation = evaluateDice(parsed, dice)
+    }
+    const { outcome, profit, reward } = evaluation
     const delta = reward - cost
     const finalPoint = allPoint + delta
 
@@ -259,14 +262,15 @@ export class Signin {
 
     const outcomeText = outcome === 'win' ? '🎉 胜利' : outcome === 'draw' ? '🤝 平局' : '💥 失败'
     const rewardText = outcome === 'win'
-      ? `返奖 ${reward} 积分（净赚 ${delta}）`
+      ? `返还本金并赢取 ${profit} 积分`
       : outcome === 'draw'
         ? `返还 ${reward} 积分（积分不变）`
         : `没有返奖（净亏 ${cost}）`
 
     return <>
       <at id={session.userId}/> 🎲 {parsed.count}d{parsed.sides}：[{dice.join(', ')}]，合计 {dice.reduce((sum, value) => sum + value, 0)}&#10;
-      花费：{cost} 积分　结果：{outcomeText}&#10;
+      花费：{cost} 积分　点数组合权重：{(evaluation.percentile * 100).toFixed(2)}%&#10;
+      结果：{outcomeText}&#10;
       {rewardText}&#10;
       当前积分：{finalPoint}
     </>

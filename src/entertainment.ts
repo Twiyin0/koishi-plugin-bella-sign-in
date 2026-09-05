@@ -6,11 +6,18 @@ export type RpsOutcome = 'win' | 'draw' | 'lose'
 export type DiceOutcome = 'lose' | 'draw' | 'win'
 
 export const MAX_DICE_COST = 1000
-export const MAX_DICE_REWARD = 4000
+export const MAX_DICE_PROFIT = 4000
 
 export interface DiceNotation {
   count: number
   sides: number
+}
+
+export interface DiceEvaluation {
+  outcome: DiceOutcome
+  percentile: number
+  profit: number
+  reward: number
 }
 
 export interface DailyProfile {
@@ -72,8 +79,8 @@ export function parseDiceNotation(input = '1d6'): DiceNotation | string {
   const sides = plainSides ?? Number(matched?.[2])
 
   if (!matched && plainSides === undefined) return '格式不对哦，请使用“骰子 2d6”或“骰子 20”。'
-  if (!Number.isInteger(count) || count < 1 || count > 20) return '一次可以投 1～20 颗骰子。'
-  if (!Number.isInteger(sides) || sides < 2 || sides > 1000) return '骰子面数需要在 2～1000 之间。'
+  if (!Number.isInteger(count) || count < 1 || count > 10) return '一次可以投 1～10 颗骰子。'
+  if (!Number.isInteger(sides) || sides < 3 || sides > 997) return '骰子面数需要在 3～997 之间。'
   return { count, sides }
 }
 
@@ -85,20 +92,81 @@ export function getDiceCost(notation: DiceNotation): number {
   return 3 * notation.count + notation.sides
 }
 
-export function pickDiceOutcome(): DiceOutcome {
-  return Random.weightedPick({ lose: 0.4, draw: 0.4, win: 0.2 }) as DiceOutcome
+function combination(total: number, selected: number): bigint {
+  if (selected < 0 || selected > total) return 0n
+  selected = Math.min(selected, total - selected)
+  let result = 1n
+  for (let index = 1; index <= selected; index++) {
+    result = result * BigInt(total - selected + index) / BigInt(index)
+  }
+  return result
 }
 
-export function getDiceReward(notation: DiceNotation, dice: number[], outcome: DiceOutcome): number {
-  const cost = getDiceCost(notation)
-  if (outcome === 'lose') return 0
-  if (outcome === 'draw') return cost
+// n 颗 m 面骰的点数和不超过 sum 的组合数量。
+function countDiceAtMost(count: number, sides: number, sum: number): bigint {
+  if (count === 0) return sum >= 0 ? 1n : 0n
+  if (sum < count) return 0n
+  if (sum >= count * sides) return BigInt(sides) ** BigInt(count)
 
-  const minimumTotal = notation.count
-  const maximumTotal = notation.count * notation.sides
-  const total = dice.reduce((sum, value) => sum + value, 0)
-  const rollRate = maximumTotal === minimumTotal ? 0 : (total - minimumTotal) / (maximumTotal - minimumTotal)
-  return Math.min(MAX_DICE_REWARD, Math.floor(cost * (2 + 2 * rollRate)))
+  const shiftedSum = sum - count
+  let result = 0n
+  for (let excluded = 0; excluded <= Math.floor(shiftedSum / sides) && excluded <= count; excluded++) {
+    const ways = combination(count, excluded)
+      * combination(shiftedSum - excluded * sides + count, count)
+    result += excluded % 2 ? -ways : ways
+  }
+  return result
+}
+
+function countDiceExact(count: number, sides: number, sum: number): bigint {
+  return countDiceAtMost(count, sides, sum) - countDiceAtMost(count, sides, sum - 1)
+}
+
+// 先按总点数、再按每轮点数进行排名，确保点数越高权重越高，同时每种组合排名唯一。
+function getDiceRank(notation: DiceNotation, dice: number[]): { rank: bigint, total: bigint } {
+  const total = BigInt(notation.sides) ** BigInt(notation.count)
+  const diceSum = dice.reduce((sum, value) => sum + value, 0)
+  let rank = countDiceAtMost(notation.count, notation.sides, diceSum - 1)
+  let remainingSum = diceSum
+
+  for (let index = 0; index < dice.length; index++) {
+    const remainingCount = dice.length - index - 1
+    for (let value = 1; value < dice[index]; value++) {
+      rank += countDiceExact(remainingCount, notation.sides, remainingSum - value)
+    }
+    remainingSum -= dice[index]
+  }
+  return { rank, total }
+}
+
+function bigintRatio(numerator: bigint, denominator: bigint): number {
+  if (denominator <= 0n) return 1
+  const precision = 1_000_000n
+  return Number(numerator * precision / denominator) / Number(precision)
+}
+
+export function evaluateDice(notation: DiceNotation, dice: number[]): DiceEvaluation | undefined {
+  const { rank, total } = getDiceRank(notation, dice)
+  // 无法被 3 整除时，仅剔除末尾 1～2 个组合并重投，使三个结果区间严格等大。
+  const usableTotal = total - total % 3n
+  if (rank >= usableTotal) return
+
+  const bucket = Number(rank * 3n / usableTotal)
+  const outcome: DiceOutcome = bucket === 0 ? 'lose' : bucket === 1 ? 'draw' : 'win'
+  const percentile = bigintRatio(rank, usableTotal - 1n)
+  const cost = getDiceCost(notation)
+
+  if (outcome === 'lose') return { outcome, percentile, profit: 0, reward: 0 }
+  if (outcome === 'draw') return { outcome, percentile, profit: 0, reward: cost }
+
+  const winStart = usableTotal * 2n / 3n
+  const winCount = usableTotal - winStart
+  const position = rank - winStart + 1n
+  const sumOfCubes = (winCount * (winCount + 1n) / 2n) ** 2n
+  // 对胜区使用离散三次权重，并归一化到平均倍率 1，避免小面数骰子额外放大收益。
+  const profitRate = bigintRatio(winCount * position ** 3n, sumOfCubes)
+  const profit = Math.min(MAX_DICE_PROFIT, Math.max(1, Math.floor(cost * profitRate)))
+  return { outcome, percentile, profit, reward: cost + profit }
 }
 
 export function normalizeRpsChoice(input: string): RpsChoice | undefined {

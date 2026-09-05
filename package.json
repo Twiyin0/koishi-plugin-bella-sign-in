@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-bella-sign-in",
   "description": "带签到、打工、积分游戏和每日运势的 Koishi 插件",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
