@@ -7,6 +7,7 @@ import {} from 'koishi-plugin-rate-limit'
 import { Page } from "puppeteer-core";
 import { Signin } from './signin';
 import { jryspro } from './jryspro';
+import { getDailyProfile } from './entertainment'
 import fs from 'fs'
 import path from 'path'
 
@@ -41,6 +42,7 @@ export interface Config {
   callme: boolean,
   waittip: boolean,
   imgQuality: number,
+  gameMaxBet: number,
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -59,7 +61,9 @@ export const Config: Schema<Config> = Schema.object({
   waittip: Schema.boolean().default(false)
   .description("启用渲染提示"),
   imgQuality: Schema.percent().default(0.4)
-  .description("输出渲染图质量")
+  .description("输出渲染图质量"),
+  gameMaxBet: Schema.number().min(0).default(1000)
+  .description('猜拳单次押注积分上限，设为 0 可关闭押注')
 })
 
 export const inject = {
@@ -99,8 +103,11 @@ export function apply(ctx: Context, config: Config) {
       用法: 抽奖 20&&#10;
       shop---&gt;积分商店,别名: 商店&#10;
       givepiontshop---&gt;积分补给&#10;别名: 积分补充(仅允许超级用户)&#10;
-      用法: 积分补充 123 @xxxxx
-      rank---&gt;积分排行榜,别名: 积分榜
+      用法: 积分补充 123 @xxxxx&#10;
+      rank---&gt;积分排行榜,别名: 积分榜&#10;
+      profile---&gt;今日人设,别名: 人设&#10;
+      dice---&gt;积分骰子,别名: 骰子（例：骰子 2d6）&#10;
+      rps---&gt;猜拳,别名: 猜拳（例：猜拳 石头 100）
     </>
   })
 
@@ -130,7 +137,7 @@ export function apply(ctx: Context, config: Config) {
     const getSigninJson = await signin.callSignin(session);
     let lvline = signin.levelJudge(Number(getSigninJson.allpoint)).level_line;
 
-    if (options.text) return <><at id={session.userId} />{getSigninJson.status? "签到成功！" : "今天已经签到过啦！"},本次签到获得积分:{getSigninJson.getpoint}</>
+    if (options.text) return <><at id={session.userId} />{getSigninJson.status? "签到成功！" : "今天已经签到过啦！"},本次签到获得积分:{getSigninJson.getpoint}&#10;</>
 
     if (config.waittip) await session.send("请稍等，正在渲染……");
 
@@ -151,7 +158,7 @@ export function apply(ctx: Context, config: Config) {
       page = await ctx.puppeteer.page();
       await page.setViewport({ width: 600, height: 1080 * 2 });
       await page.goto(`file:///${resolve(__dirname, "./index/index.html")}`);
-      await page.waitForSelector("#body");
+      await page.waitForSelector("#rendered-indicator");
       const element = await page.$("#body");
       return h.image(await element.screenshot(config.imgQuality===1? {
         encoding: "binary",
@@ -175,6 +182,31 @@ export function apply(ctx: Context, config: Config) {
     const result = await signin.lottery(session, count);
     return result;
   })
+
+  // 轻量娱乐
+  ctx.command('bella/profile', '查看每天固定的今日人设').alias('今日人设').alias('人设')
+  .action(async ({ session }) => {
+    const jrys = new jryspro()
+    const fortune: any = await jrys.getJrys(session.userId || 2333)
+    const profile = getDailyProfile(session.userId || 2333)
+    return <>
+      <at id={session.userId}/>&#10;
+      🎭 今日人设：{profile.title}&#10;
+      签运：{fortune.fortuneSummary} {fortune.luckyStar}&#10;
+      {fortune.signText}&#10;
+      幸运色：{profile.color}&#10;幸运食物：{profile.food}&#10;
+      幸运方位：{profile.direction}&#10;
+      宜：{profile.activity}&#10;忌：{profile.avoid}
+    </>
+  })
+
+  ctx.command('bella/dice [notation:string]', '积分骰子，支持 2d6 或 20', { minInterval: 5000 }).alias('掷骰子').alias('骰子')
+  .userFields(['name', 'id'])
+  .action(async ({ session }, notation = '1d6') => signin.diceGame(session, notation))
+
+  ctx.command('bella/rps <choice:string> [bet:number]', '和贝拉猜拳，可选押注积分', { minInterval: 5000 }).alias('猜拳')
+  .userFields(['name', 'id'])
+  .action(async ({ session }, choice, bet) => signin.rockPaperScissors(session, choice, bet))
 
   // 打工部分
   ctx.command('bella/workstart', '开始通过打工获取积分', { minInterval: 0.2*60000 }).alias("开始打工").alias("打工开始")
@@ -276,8 +308,8 @@ async function transferData(ctx:Context, session:Session) {
       let uid = bindingInfo[0];
       let point = data.point;
 
-      if (uid?.aid) {
-        await ctx.monetary.gain(uid.aid, point, "Bella");
+      if (uid?.aid && ctx.monetary) {
+        await ctx.monetary?.gain(uid.aid, point, "Bella");
       }
     }
     return "[贝拉签到]>> 迁移数据成功！"

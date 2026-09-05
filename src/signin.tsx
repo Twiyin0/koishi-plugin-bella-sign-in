@@ -1,5 +1,18 @@
-import { Context, Schema, Time, Random } from 'koishi'
+import { Context, Time, Random } from 'koishi'
+import type {} from 'koishi-plugin-monetary'
 import { } from "koishi-plugin-rate-limit"
+import {
+  getDiceCost,
+  getDiceReward,
+  MAX_DICE_COST,
+  normalizeRpsChoice,
+  parseDiceNotation,
+  pickDiceOutcome,
+  playRps,
+  randomRpsChoice,
+  rollDice,
+  rpsLabels,
+} from './entertainment'
 
 declare module 'koishi' {
   interface Tables {
@@ -62,6 +75,7 @@ export const inject = {
 export class Signin {
   public ctx:Context;
   public cfg:any;
+  private rpsDrawUsers = new Set<string>();
   constructor(context:Context, config:any) {
     this.ctx = context;
     this.cfg = config;
@@ -91,12 +105,13 @@ export class Signin {
     name = name.length>12? name.substring(0,12):name;
 
     let signTime =  Time.template('yyyy-MM-dd hh:mm:ss', new Date());
-    let all_point = (await this.ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.point;
-    let time = (await this.ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.time;
-    let count = (await this.ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.count;
-    let dbname = (await this.ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.name;
+    const userData = (await this.ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0];
+    let all_point = userData?.point;
+    let time = userData?.time;
+    let count = userData?.count;
+    let dbname = userData?.name;
     let signpoint = Random.int(this.cfg.signpointmin,this.cfg.signpointmax);
-    let nowPoint = (await this.ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.current_point;
+    let nowPoint = userData?.current_point;
     if (!dbname) await this.ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), name: name }]);
     if (!all_point && !time) {
         if (this.ctx.monetary) await this.ctx.monetary.gain(session.user.id, signpoint, "Bella");
@@ -104,23 +119,24 @@ export class Signin {
         // logger.info(`${name}(${session.userId}) 第一次签到成功，写入数据库！`)
         return { "cmd":"get", "status": 1, "getpoint": signpoint, "signTime": signTime, "allpoint": signpoint, "count": 1 };
     }
-    if (Number(time.slice(8,10)) - Number(signTime.slice(8,10))) {
+    if (!time || time.slice(0, 10) !== signTime.slice(0, 10)) {
         if (this.ctx.monetary) await this.ctx.monetary.gain(session.user.id, signpoint, "Bella");
-        await this.ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), name: name, time: signTime, point: Number(all_point+signpoint), count: count+1, current_point: Number(signpoint) }]);
+        await this.ctx.database.upsert('bella_sign_in', [{ id: (String(session.userId)), name: name, time: signTime, point: Number((all_point || 0)+signpoint), count: (count || 0)+1, current_point: Number(signpoint) }]);
         // logger.info(`${name}(${session.userId}) 签到成功！`)
-        return { "cmd":"get", "status": 1, "getpoint": signpoint, "signTime": signTime, "allpoint": all_point+signpoint, "count": count+1 };
+        return { "cmd":"get", "status": 1, "getpoint": signpoint, "signTime": signTime, "allpoint": (all_point || 0)+signpoint, "count": (count || 0)+1 };
     }
     return { "cmd":"get", "status": 0, "getpoint": nowPoint, "signTime": signTime, "allpoint": all_point, "count": count };
   }
 
   // 参数：session， 返回：json
   async signQuery(session) {
-    let all_point = (await this.ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.point;
-    let time = (await this.ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.time;
-    let count = (await this.ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.count;
-    let current_point = (await this.ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]?.current_point;
+    const userData = (await this.ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0];
+    let all_point = userData?.point;
+    let time = userData?.time;
+    let count = userData?.count;
+    let current_point = userData?.current_point;
     let nowTime =  Time.template('yyyy-MM-dd hh:mm:ss', new Date());
-    if (Number(time.slice(8,10)) - Number(nowTime.slice(8,10))) {
+    if (!time || time.slice(0, 10) !== nowTime.slice(0, 10)) {
         return { "cmd":"query", "status": 2, "getpoint": current_point? current_point:0, "signTime": time? time:"暂无数据", "allpoint": all_point? all_point:0, "count": count? count:0 };
     }
     return { "cmd":"query", "status": 0, "getpoint": current_point? current_point:0, "signTime": time? time:"暂无数据", "allpoint": all_point? all_point:0, "count": count? count:0 };
@@ -162,6 +178,99 @@ export class Signin {
         </>
     }
     }
+  }
+
+  async rockPaperScissors(session, choice: string, bet = 0) {
+    const playerChoice = normalizeRpsChoice(choice)
+    if (!playerChoice) return '请选择“石头”、“剪刀”或“布”。例如：猜拳 石头 100'
+
+    bet = Number(bet ?? 0)
+    const configuredMaxBet = Number(this.cfg.gameMaxBet ?? 1000)
+    const maxBet = Number.isFinite(configuredMaxBet) ? Math.max(0, Math.floor(configuredMaxBet)) : 1000
+    if (!Number.isInteger(bet) || bet < 0) return '押注积分必须是大于等于 0 的整数。'
+    if (bet > maxBet) return `单次押注不能超过 ${maxBet} 积分。`
+
+    let allPoint: number | undefined
+
+    if (bet > 0) {
+      const userData = (await this.ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]
+      if (!userData) return '请先签到一次，再来押积分猜拳哦。'
+      allPoint = Number(userData.point || 0)
+      if (allPoint < bet) return `积分不足！你目前有 ${allPoint} 积分。`
+    }
+
+    const userId = String(session.userId)
+    const protectedRound = this.rpsDrawUsers.delete(userId)
+    const computerChoice = randomRpsChoice(protectedRound ? playerChoice : undefined)
+    const result = playRps(playerChoice, computerChoice)
+    if (result.outcome === 'draw') this.rpsDrawUsers.add(userId)
+
+    const resultText = result.outcome === 'win' ? '你赢啦！' : result.outcome === 'draw' ? '平局，下一拳必定分出胜负！' : '贝拉赢啦！'
+    let pointText = '本局没有押注积分。'
+
+    if (bet > 0) {
+      if (result.outcome === 'win') {
+        await this.ctx.database.upsert('bella_sign_in', [{ id: String(session.userId), point: allPoint! + bet }])
+        if (this.ctx.monetary) await this.ctx.monetary.gain(session.user.id, bet, 'Bella')
+        pointText = `赢得 ${bet} 积分，当前 ${allPoint! + bet} 积分。`
+      } else if (result.outcome === 'lose') {
+        await this.ctx.database.upsert('bella_sign_in', [{ id: String(session.userId), point: allPoint! - bet }])
+        if (this.ctx.monetary) await this.ctx.monetary.cost(session.user.id, bet, 'Bella')
+        pointText = `失去 ${bet} 积分，当前 ${allPoint! - bet} 积分。`
+      } else {
+        pointText = `平局退回 ${bet} 积分，当前仍有 ${allPoint} 积分。`
+      }
+    }
+
+    return <>
+      <at id={session.userId}/>&#10;
+      你出了：{rpsLabels[playerChoice]}&#10;
+      贝拉出了：{rpsLabels[result.computer]}&#10;
+      {resultText} {pointText}
+    </>
+  }
+
+  async diceGame(session, notation = '1d6') {
+    const parsed = parseDiceNotation(notation)
+    if (typeof parsed === 'string') return parsed
+
+    const cost = getDiceCost(parsed)
+    if (cost > MAX_DICE_COST) {
+      return `本局需要 ${cost} 积分，超过单局 ${MAX_DICE_COST} 积分上限，请减少骰子数量或面数。`
+    }
+
+    const userData = (await this.ctx.database.get('bella_sign_in', { id: String(session.userId) }))[0]
+    if (!userData) return '请先签到一次，再来玩积分骰子哦。'
+    const allPoint = Number(userData.point || 0)
+    if (allPoint < cost) return `本局需要 ${cost} 积分，你目前只有 ${allPoint} 积分。`
+
+    const dice = rollDice(parsed)
+    const outcome = pickDiceOutcome()
+    const reward = getDiceReward(parsed, dice, outcome)
+    const delta = reward - cost
+    const finalPoint = allPoint + delta
+
+    if (delta !== 0) {
+      await this.ctx.database.upsert('bella_sign_in', [{ id: String(session.userId), point: finalPoint }])
+      if (this.ctx.monetary) {
+        if (delta > 0) await this.ctx.monetary.gain(session.user.id, delta, 'Bella')
+        else await this.ctx.monetary.cost(session.user.id, Math.abs(delta), 'Bella')
+      }
+    }
+
+    const outcomeText = outcome === 'win' ? '🎉 胜利' : outcome === 'draw' ? '🤝 平局' : '💥 失败'
+    const rewardText = outcome === 'win'
+      ? `返奖 ${reward} 积分（净赚 ${delta}）`
+      : outcome === 'draw'
+        ? `返还 ${reward} 积分（积分不变）`
+        : `没有返奖（净亏 ${cost}）`
+
+    return <>
+      <at id={session.userId}/> 🎲 {parsed.count}d{parsed.sides}：[{dice.join(', ')}]，合计 {dice.reduce((sum, value) => sum + value, 0)}&#10;
+      花费：{cost} 积分　结果：{outcomeText}&#10;
+      {rewardText}&#10;
+      当前积分：{finalPoint}
+    </>
   }
 
   // 参数：session 返回：<>string</>
@@ -239,7 +348,7 @@ export class Signin {
     else if (this.cfg.superuser.includes(session.userId)) {
       if (this.ctx.monetary) await this.ctx.monetary.gain(session.user.id, count, "Bella");
       await this.ctx.database.upsert('bella_sign_in', [{ id: (String(user.replace(/.*:/gi,''))), point: (count<0)? all_point-Math.abs(count):all_point+count}]);
-      return <>成功给<at id={user.replace(/.*:/gi,'')? user:user.replace(/.*:/gi,'')}/>{(count<0)? "减去":"补充"}{count}点积分.</>
+      return <>成功给<at id={user.replace(/.*:/gi,'')}/>{(count<0)? "减去":"补充"}{count}点积分.</>
     }
     else {
       return <>没有权限!</>

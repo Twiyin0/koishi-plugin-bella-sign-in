@@ -164,9 +164,10 @@
                 <span>##luckystar##</span>
             </div>
         </div>
-        <div class="credit">
+        <div id="rendered-indicator" class="credit">
             仅供娱乐 | 毫无科学依据 | 请勿迷信 | Twiyin0 © 2024
         </div>
     </div>
+    <script>window.onload=()=>document.getElementById('rendered-indicator').style.display='block';</script>
 </body>
 </html>
